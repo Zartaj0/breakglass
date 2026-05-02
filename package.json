@@ -1,0 +1,29 @@
+{
+  "name": "breakglass",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Self-hosted Safe incident-response console for treasury operators.",
+  "packageManager": "npm@11.6.1",
+  "scripts": {
+    "watcher:demo": "node apps/watcher/src/cli.js",
+    "watcher:live": "SAFE_PENDING_SOURCE=live node apps/watcher/src/cli.js",
+    "orchestrator:run": "node apps/orchestrator/src/cli.js",
+    "dashboard:dev": "node apps/dashboard/src/server.js",
+    "product:start": "node scripts/start-local-product.js",
+    "product:start:full": "node scripts/start-local-product.js --with-gensyn",
+    "router:serve": "node apps/agent-router/src/server.js",
+    "reviewer:serve": "node apps/agent-reviewer/src/server.js",
+    "gensyn:mesh": "node scripts/start-gensyn-dev-mesh.js",
+    "seed:incident": "node scripts/seed-demo-incident.js",
+    "demo:check": "node scripts/check-demo-readiness.js",
+    "dev": "npm run product:start",
+    "build": "echo \"No build step yet. Runtime is plain Node.js.\"",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@0glabs/0g-ts-sdk": "^0.3.3",
+    "@safe-global/api-kit": "^4.1.0",
+    "@safe-global/protocol-kit": "^7.1.0",
+    "@safe-global/types-kit": "^3.1.0"
+  }
+}
