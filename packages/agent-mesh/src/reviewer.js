@@ -201,24 +201,203 @@ function handleReviewerRpc(requestBody, options = {}) {
       );
     }
 
-    const review = reviewIncidentAgainstRunbook(
-      args.incident,
-      args.runbook,
-      options,
-    );
+    const aiConfig = options.aiConfig ?? null;
+    const useAi = aiConfig && aiConfig.provider !== "disabled";
 
+    if (useAi) {
+      return reviewIncidentWithAI(args.incident, args.runbook, options).then((review) =>
+        buildJsonRpcResponse(id, {
+          content: [{ type: "text", text: JSON.stringify(review) }],
+          structuredContent: review,
+        }),
+      );
+    }
+
+    const review = reviewIncidentAgainstRunbook(args.incident, args.runbook, options);
     return buildJsonRpcResponse(id, {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(review),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify(review) }],
       structuredContent: review,
     });
   }
 
   return buildJsonRpcError(id, -32601, `Unsupported method: ${method}`);
+}
+
+// ---------------------------------------------------------------------------
+// AI-powered review layer
+// ---------------------------------------------------------------------------
+
+const GEMINI_REVIEWER_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const ANTHROPIC_REVIEWER_URL = "https://api.anthropic.com/v1/messages";
+const REVIEWER_TIMEOUT_MS = 7000;
+
+const NVIDIA_REVIEWER_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+
+function resolveAiReviewerConfig(env = process.env) {
+  return {
+    geminiApiKey: env.GEMINI_API_KEY ?? null,
+    geminiModel: env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    anthropicApiKey: env.ANTHROPIC_API_KEY ?? null,
+    anthropicModel: env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001",
+    nvidiaApiKey: env.NVIDIA ?? null,
+    nvidiaModel: env.NVIDIA_MODEL ?? "meta/llama-3.1-8b-instruct",
+    mistralApiKey: env.MISTRAL ?? null,
+    mistralModel: env.MISTRAL_MODEL ?? "mistral-small-latest",
+  };
+}
+
+function buildAiReviewPrompt(incident, runbook, deterministicReview) {
+  const firstStep = runbook?.steps?.[0];
+  const reasons = (incident?.evidence?.reasons ?? [])
+    .map((r) => `  - ${r.code}: ${r.message}`)
+    .join("\n");
+
+  return `You are an independent security reviewer for a Safe multisig treasury wallet.
+
+CONTEXT: BreakGlass has detected a suspicious pending transaction in the Safe queue. It has NOT been executed yet. The system wants to block it by proposing a rejection transaction at the same nonce.
+
+INCIDENT DETAILS:
+- Trigger: ${incident?.triggerType ?? "unknown"} (severity: ${incident?.severity ?? "unknown"})
+- Safe: ${incident?.safeAddress} on ${incident?.network}
+- Risk signals detected:\n${reasons || "  none"}
+
+PROPOSED AUTOMATED RESPONSE:
+Step: ${firstStep?.kind ?? "none"}
+Action: ${firstStep?.description ?? ""}
+Deterministic engine says: ${deterministicReview.recommendation.toUpperCase()}
+
+YOUR TASK: Independently verify whether the automated response plan is correct.
+- "approve" = the plan is sensible, go ahead with the containment
+- "halt" = something is wrong with the plan, a human must review before proceeding
+
+Respond with ONLY this JSON — no other text:
+{"recommendation":"approve","confidence":0.88,"reasoning":"one sentence explaining your verdict","agreedWithDeterministic":true}
+
+Note: approving a suspicious-approval containment plan means you agree the Safe should block this pending transaction. This is the correct response for unknown or risky approvals.`;
+}
+
+function parseAiReviewResponse(text) {
+  if (!text) return null;
+  try {
+    const match = text.match(/\{[\s\S]*"recommendation"[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+async function callReviewerLlm(prompt, config) {
+  const MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions";
+
+  const providers = [];
+  if (config.geminiApiKey) {
+    providers.push(async () => {
+      const res = await fetch(`${GEMINI_REVIEWER_URL}/${config.geminiModel ?? "gemini-2.5-flash"}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": config.geminiApiKey },
+        body: JSON.stringify({ generationConfig: { temperature: 0.1, maxOutputTokens: 256 }, contents: [{ role: "user", parts: [{ text: prompt }] }] }),
+        signal: AbortSignal.timeout(REVIEWER_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`Gemini ${res.status}`);
+      const d = await res.json();
+      return (d?.candidates?.[0]?.content?.parts ?? []).filter((p) => p.text).map((p) => p.text).join("").trim();
+    });
+  }
+  if (config.anthropicApiKey) {
+    providers.push(async () => {
+      const res = await fetch(ANTHROPIC_REVIEWER_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": config.anthropicApiKey, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: config.anthropicModel ?? "claude-haiku-4-5-20251001", max_tokens: 256, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(REVIEWER_TIMEOUT_MS),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message ?? `Anthropic ${res.status}`); }
+      const d = await res.json();
+      return (d?.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("").trim();
+    });
+  }
+  if (config.nvidiaApiKey) {
+    providers.push(async () => {
+      const res = await fetch(NVIDIA_REVIEWER_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "authorization": `Bearer ${config.nvidiaApiKey}` },
+        body: JSON.stringify({ model: config.nvidiaModel ?? "meta/llama-3.1-8b-instruct", max_tokens: 256, temperature: 0.1, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(REVIEWER_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`Nvidia ${res.status}`);
+      const d = await res.json();
+      return (d?.choices ?? []).map((c) => c.message?.content ?? "").join("").trim();
+    });
+  }
+  if (config.mistralApiKey) {
+    providers.push(async () => {
+      const res = await fetch(MISTRAL_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "authorization": `Bearer ${config.mistralApiKey}` },
+        body: JSON.stringify({ model: config.mistralModel ?? "mistral-small-latest", max_tokens: 256, temperature: 0.1, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(REVIEWER_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`Mistral ${res.status}`);
+      const d = await res.json();
+      return d?.choices?.[0]?.message?.content?.trim() ?? null;
+    });
+  }
+
+  for (const fn of providers) {
+    try {
+      const text = await fn();
+      if (text) return text;
+    } catch {
+      // try next
+    }
+  }
+
+  return null;
+}
+
+async function reviewIncidentWithAI(incident, runbook, options = {}) {
+  const deterministicReview = reviewIncidentAgainstRunbook(incident, runbook, options);
+  const aiConfig = options.aiConfig ?? resolveAiReviewerConfig({});
+
+  if (aiConfig.provider === "disabled") {
+    return deterministicReview;
+  }
+
+  try {
+    const prompt = buildAiReviewPrompt(incident, runbook, deterministicReview);
+    const rawText = await callReviewerLlm(prompt, aiConfig);
+    const parsed = parseAiReviewResponse(rawText);
+
+    if (!parsed) {
+      return { ...deterministicReview, aiReasoning: rawText, aiProvider: aiConfig.provider, aiEnhanced: true };
+    }
+
+    const aiRecommendation = parsed.recommendation === "halt" ? "halt" : "approve";
+    const finalRecommendation =
+      aiRecommendation !== deterministicReview.recommendation
+        ? "halt"
+        : deterministicReview.recommendation;
+
+    const reviewerLabel = toStringValue(options.reviewerLabel, "unnamed-reviewer");
+
+    return {
+      ...deterministicReview,
+      recommendation: finalRecommendation,
+      confidence: typeof parsed.confidence === "number"
+        ? Math.min(1, Math.max(0, parsed.confidence))
+        : deterministicReview.confidence,
+      summary: parsed.reasoning
+        ? `${reviewerLabel}: ${parsed.reasoning}`
+        : deterministicReview.summary,
+      aiReasoning: parsed.reasoning ?? null,
+      aiProvider: aiConfig.provider,
+      aiEnhanced: true,
+      aiAgreedWithDeterministic: parsed.agreedWithDeterministic ?? null,
+    };
+  } catch {
+    return { ...deterministicReview, aiReasoning: null, aiProvider: null, aiEnhanced: false };
+  }
 }
 
 module.exports = {
@@ -228,4 +407,6 @@ module.exports = {
   buildToolDefinition,
   handleReviewerRpc,
   reviewIncidentAgainstRunbook,
+  reviewIncidentWithAI,
+  resolveAiReviewerConfig,
 };

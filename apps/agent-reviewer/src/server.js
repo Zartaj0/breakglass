@@ -4,6 +4,8 @@ const { loadDotEnv } = require("../../../packages/shared/src/load-env");
 const {
   REVIEW_SERVICE_NAME,
   handleReviewerRpc,
+  reviewIncidentWithAI,
+  resolveAiReviewerConfig,
 } = require("../../../packages/agent-mesh/src/reviewer");
 
 loadDotEnv({ override: true });
@@ -109,10 +111,11 @@ function createReviewerServer(config = resolveReviewerServerConfig()) {
       try {
         const rawBody = await readRequestBody(req);
         const body = rawBody ? JSON.parse(rawBody) : {};
-        const response = handleReviewerRpc(body, {
+        const response = await Promise.resolve(handleReviewerRpc(body, {
           reviewerId: config.reviewerId,
           reviewerLabel: config.reviewerLabel,
-        });
+          aiConfig: resolveAiReviewerConfig(process.env),
+        }));
 
         return sendJson(res, 200, response);
       } catch (error) {

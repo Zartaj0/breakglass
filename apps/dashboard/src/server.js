@@ -773,8 +773,53 @@ function renderStep(step) {
   </div>`;
 }
 
+function renderToolCalls(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return "";
+  const items = toolCalls.map((tc) => {
+    const resultPreview = JSON.stringify(tc.result ?? {}).slice(0, 120);
+    return `<div class="tool-call">
+      <span class="tool-name">${esc(tc.tool)}</span>
+      <span class="tool-dur">${tc.durationMs ?? 0}ms</span>
+      <div class="tool-result">${esc(resultPreview)}${resultPreview.length >= 120 ? "..." : ""}</div>
+    </div>`;
+  }).join("");
+  return `<details class="tool-steps">
+    <summary>Agent steps (${toolCalls.length} tool calls)</summary>
+    ${items}
+  </details>`;
+}
+
+function renderInvestigationSection(investigation, brief) {
+  if (!investigation || investigation.provider === "deterministic") {
+    // Fall back to old brief display
+    if (brief) return `<div class="ai-brief"><div class="ai-tag">AI Analysis</div><p>${esc(brief)}</p></div>`;
+    return `<p class="incident-summary">${esc("")}</p>`;
+  }
+
+  const verdictColor = {
+    HALT: "#dc2626",
+    INVESTIGATE: "#d97706",
+    APPROVE: "#16a34a",
+  }[investigation.verdict] ?? "#475569";
+
+  const findings = (investigation.keyFindings ?? [])
+    .map((f) => `<li>${esc(f)}</li>`)
+    .join("");
+
+  return `<div class="ai-brief">
+    <div class="investigation-header">
+      <span class="ai-tag">Investigation Agent</span>
+      <span class="verdict-badge" style="background:${verdictColor}">${esc(investigation.verdict ?? "")}</span>
+      <span class="ai-provider-tag">${esc(investigation.provider ?? "")}</span>
+    </div>
+    ${findings ? `<ul class="findings-list">${findings}</ul>` : ""}
+    ${investigation.operatorRecommendation ? `<div class="operator-rec">${esc(investigation.operatorRecommendation)}</div>` : ""}
+    ${renderToolCalls(investigation.toolCalls)}
+  </div>`;
+}
+
 function renderIncidentCard(result) {
-  const { incident, brief, runbook, peerReview, briefStatus } = result;
+  const { incident, brief, runbook, peerReview, briefStatus, investigation } = result;
   const sev = SEV[incident.severity] ?? SEV.medium;
   const steps = runbook?.steps ?? [];
   const triggerLabel = TRIGGER_LABELS[incident.triggerType] ?? esc(incident.triggerType);
@@ -784,13 +829,15 @@ function renderIncidentCard(result) {
   const firstAction = runbook?.steps?.[0]?.description ?? null;
   const receiptHref = buildReceiptHref(result.receipt?.receiptId);
 
-  const briefSection = brief
-    ? `<div class="ai-brief"><div class="ai-tag">AI Analysis</div><p>${esc(brief)}</p></div>`
-    : `<p class="incident-summary">${esc(incident.summary)}</p>`;
-  const briefNotice =
-    !brief && briefStatus?.configured && briefStatus?.error
-      ? `<div class="brief-note">AI brief unavailable: ${esc(briefStatus.error)}</div>`
-      : "";
+  const briefSection = renderInvestigationSection(investigation, brief);
+  const briefError = (investigation?.configured && investigation?.error && !investigation?.text)
+    ? investigation.error
+    : (!brief && briefStatus?.configured && briefStatus?.error)
+      ? briefStatus.error
+      : null;
+  const briefNotice = briefError
+    ? `<div class="brief-note">Investigation agent unavailable: ${esc(briefError)}</div>`
+    : "";
 
   const peerSection = peerReview?.provider?.mode === "mcp"
     ? `<div class="peer-row">
@@ -989,7 +1036,20 @@ code{font-family:"SFMono-Regular",Consolas,monospace;font-size:.83em;background:
 .incident-summary{font-size:.86rem;color:#475569;line-height:1.6}
 .incident-summary strong{color:#0f172a}
 .ai-brief{background:#fff;border-radius:7px;padding:12px 14px;border:1px solid #e2e8f0}
-.ai-tag{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7c3aed;margin-bottom:5px}
+.investigation-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.ai-tag{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7c3aed}
+.verdict-badge{font-size:.72rem;font-weight:700;color:#fff;padding:2px 8px;border-radius:99px}
+.ai-provider-tag{font-size:.72rem;color:#94a3b8}
+.findings-list{margin:6px 0 8px 16px;display:flex;flex-direction:column;gap:3px}
+.findings-list li{font-size:.85rem;color:#1e293b;line-height:1.5}
+.operator-rec{font-size:.86rem;color:#475569;font-style:italic;margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9}
+.tool-steps{margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
+.tool-steps summary{font-size:.75rem;font-weight:600;color:#64748b;padding:6px 10px;cursor:pointer;background:#f8fafc}
+.tool-steps summary:hover{background:#f1f5f9}
+.tool-call{padding:6px 10px;border-top:1px solid #f1f5f9;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.tool-name{font-family:monospace;font-size:.78rem;font-weight:700;color:#7c3aed}
+.tool-dur{font-size:.72rem;color:#94a3b8}
+.tool-result{font-family:monospace;font-size:.72rem;color:#475569;width:100%;word-break:break-all}
 .ai-brief p{font-size:.86rem;color:#1e293b;line-height:1.7}
 .brief-note{font-size:.78rem;color:#7c2d12;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 12px}
 .peer-row{display:flex;align-items:center;gap:8px;background:#f8fafc;border-radius:6px;padding:7px 12px;flex-wrap:wrap}

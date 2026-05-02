@@ -35,8 +35,8 @@ const {
   writeReceiptMirror,
 } = require("../../../packages/storage-0g/src/client");
 const {
-  generateIncidentBrief,
-} = require("../../../packages/ai/src/brief");
+  investigateIncident,
+} = require("../../../packages/ai/src/investigator");
 
 function clonePlainData(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -243,9 +243,9 @@ async function runSingleIncident({
   }
 
   const compiledRunbook = compileRunbook(incident);
-  const [peerReview, briefResult] = await Promise.all([
+  const [peerReview, investigation] = await Promise.all([
     reviewIncidentWithPeers(incident, compiledRunbook, agentMeshConfig),
-    generateIncidentBrief(incident, compiledRunbook, briefConfigInput),
+    investigateIncident(incident, compiledRunbook, briefConfigInput),
   ]);
   const simulated = await simulateRunbook(incident, compiledRunbook, keeperhubConfig);
   const firstExecutableStep = selectFirstExecutableStep(simulated.runbook);
@@ -287,8 +287,9 @@ async function runSingleIncident({
 
   return {
     incident,
-    brief: briefResult.text,
-    briefStatus: briefResult,
+    brief: investigation.text,
+    briefStatus: investigation,
+    investigation,
     runbook: simulated.runbook,
     simulation: simulated.provider,
     peerReview,

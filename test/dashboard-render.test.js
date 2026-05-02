@@ -117,7 +117,7 @@ test("renders AI availability note when briefs are configured but unavailable", 
     },
   ]);
 
-  assert.match(html, /AI brief unavailable/i);
+  assert.match(html, /unavailable/i);
   assert.match(html, /credit balance is too low/i);
 });
 
