@@ -1,0 +1,82 @@
+{
+  "transactions": [
+    {
+      "safeTxHash": "0xown111111111111111111111111111111111111111111111111111111111111",
+      "safe": "0xSafe000000000000000000000000000000000001",
+      "to": "0xSafe000000000000000000000000000000000001",
+      "value": "0",
+      "data": "0x",
+      "operation": 0,
+      "nonce": 11,
+      "confirmationsRequired": 2,
+      "confirmationsCollected": 1,
+      "confirmations": [],
+      "dataDecoded": {
+        "method": "addOwnerWithThreshold",
+        "parameters": [
+          { "name": "owner", "type": "address", "value": "0x9999999999999999999999999999999999999999" },
+          { "name": "_threshold", "type": "uint256", "value": "2" }
+        ]
+      },
+      "submissionDate": "2026-04-28T00:00:00.000Z"
+    },
+    {
+      "safeTxHash": "0xthr222222222222222222222222222222222222222222222222222222222222",
+      "safe": "0xSafe000000000000000000000000000000000001",
+      "to": "0xSafe000000000000000000000000000000000001",
+      "value": "0",
+      "data": "0x",
+      "operation": 0,
+      "nonce": 12,
+      "confirmationsRequired": 2,
+      "confirmationsCollected": 1,
+      "confirmations": [],
+      "dataDecoded": {
+        "method": "changeThreshold",
+        "parameters": [
+          { "name": "_threshold", "type": "uint256", "value": "1" }
+        ]
+      },
+      "submissionDate": "2026-04-28T00:01:00.000Z"
+    },
+    {
+      "safeTxHash": "0xmod333333333333333333333333333333333333333333333333333333333333",
+      "safe": "0xSafe000000000000000000000000000000000001",
+      "to": "0xSafe000000000000000000000000000000000001",
+      "value": "0",
+      "data": "0x",
+      "operation": 0,
+      "nonce": 13,
+      "confirmationsRequired": 2,
+      "confirmationsCollected": 1,
+      "confirmations": [],
+      "dataDecoded": {
+        "method": "enableModule",
+        "parameters": [
+          { "name": "module", "type": "address", "value": "0x8888888888888888888888888888888888888888" }
+        ]
+      },
+      "submissionDate": "2026-04-28T00:02:00.000Z"
+    },
+    {
+      "safeTxHash": "0xtrf444444444444444444444444444444444444444444444444444444444444",
+      "safe": "0xSafe000000000000000000000000000000000001",
+      "to": "0xToken000000000000000000000000000000000001",
+      "value": "0",
+      "data": "0x",
+      "operation": 0,
+      "nonce": 14,
+      "confirmationsRequired": 2,
+      "confirmationsCollected": 1,
+      "confirmations": [],
+      "dataDecoded": {
+        "method": "transfer",
+        "parameters": [
+          { "name": "recipient", "type": "address", "value": "0x7777777777777777777777777777777777777777" },
+          { "name": "amount", "type": "uint256", "value": "2500000000000000000000" }
+        ]
+      },
+      "submissionDate": "2026-04-28T00:03:00.000Z"
+    }
+  ]
+}
