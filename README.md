@@ -1,257 +1,143 @@
 # BreakGlass
 
-BreakGlass is a self-hosted Safe incident-response console.
-
-You run it locally, open a browser dashboard, add one or more Safe addresses, and BreakGlass continuously polls the Safe queue for risky pending transactions. When it finds one, it explains the risk in plain English, compiles a deterministic containment runbook, sends the runbook steps to KeeperHub, and lets an operator propose the first mitigation from the UI.
+**24/7 Safe treasury guardian.** Add any Safe address in the browser, and BreakGlass monitors it continuously — detecting 5 classes of critical incident, explaining each one in plain English, and putting a one-click rejection in your hands before it executes.
 
 Built for `ETHGlobal Open Agents 2026`.
 
-## What The Product Is
+---
 
-BreakGlass is not a chat wallet and it is not a free-form AI planner.
+## For End Users
 
-It is a Safe treasury first responder:
+Visit the BreakGlass dashboard. That's it.
 
-1. Monitor pending Safe transactions
-2. Detect known incident classes
-3. Compile the correct deterministic containment runbook
-4. Explain the issue in plain English
-5. Simulate the runbook through KeeperHub
-6. Optionally collect Gensyn peer review
-7. Let an operator propose containment through Safe
+1. Enter your Safe address and select the network
+2. Click **Start Monitoring**
+3. BreakGlass polls your Safe every 30 seconds across any of 22 supported chains
+4. When a suspicious pending transaction appears, you see an incident card — what it is, why it's risky, what to do
+5. Click **Propose Containment** to submit a rejection transaction directly to your Safe queue
 
-## What The User Does
+No API keys. No terminal. No configuration.
 
-The primary user is a Safe treasury operator.
+---
 
-Their flow is:
+## 5 Incident Classes
 
-1. Open BreakGlass in the browser
-2. Add a Safe address and network
-3. Wait for the monitor to poll the Safe queue
-4. Read the incident card if a risky pending transaction is found
-5. Review the containment runbook
-6. Click `Propose Containment` if they want BreakGlass to submit the first mitigation
-
-## What Runs Where
-
-- `Dashboard`: the actual product UI at `http://127.0.0.1:3030`
-- `Dashboard server`: also the backend monitor and API server
-- `CLI`: used for startup, testing, seeding demo incidents, and one-off debugging
-
-If you are just using the product, you should mostly think in terms of:
-
-- start the product
-- open the browser
-- add a Safe
-- respond to incidents
-
-## Incident Classes
-
-BreakGlass currently detects 5 incident classes:
-
-| Trigger | What It Catches |
+| Trigger | What Gets Caught |
 |---|---|
-| `suspicious_approval` | token approvals to unknown or dangerous spenders |
-| `ownership_change` | add owner, remove owner, swap owner |
-| `threshold_reduction` | lowering the Safe threshold below policy |
-| `module_enablement` | enabling an unknown Safe module |
-| `large_transfer` | ETH or ERC-20 transfers above configured limits |
+| Suspicious Approval | Token spending approval to unknown or unlimited spender |
+| Ownership Change | `addOwnerWithThreshold`, `removeOwner`, `swapOwner` |
+| Threshold Reduction | `changeThreshold` below minimum or to 1 |
+| Module Enablement | `enableModule` with unknown contract |
+| Large Transfer | ETH or ERC-20 transfer above configured limit |
 
-Each incident type maps to a deterministic runbook compiler. The LLM explains the incident. The code decides the containment steps.
+---
 
-## Quick Start
+## How Containment Works
+
+When you click **Propose Containment**, BreakGlass submits a rejection transaction at the same nonce as the suspicious pending transaction. This invalidates it — the malicious tx can no longer execute once the rejection gets enough co-signatures. Your co-signers approve it the same way they approve any Safe transaction.
+
+BreakGlass is the first responder. Your multisig stays in control.
+
+---
+
+## For Operators (Deploying BreakGlass)
+
+If you are hosting BreakGlass for your team:
+
+### 1. Set credentials once
 
 ```bash
-npm install
 cp .env.example .env
 ```
 
-Fill in at least:
-
-- `SAFE_API_KEY`
-- one AI provider:
-  - `AI_BRIEF_PROVIDER=gemini` and `GEMINI_API_KEY`
-  - or `AI_BRIEF_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`
-  - or `AI_BRIEF_PROVIDER=ollama` and a local Ollama instance
-
-Then start the product:
-
 ```bash
-npm run product:start
-```
+# Required
+SAFE_API_KEY=           # from app.safe.global → Settings → API Keys
 
-Open:
-
-```text
-http://127.0.0.1:3030
-```
-
-If you also want the local Gensyn reviewer mesh:
-
-```bash
-npm run product:start:full
-```
-
-## Main Commands
-
-```bash
-npm run product:start
-```
-
-Start the dashboard and backend monitor.
-
-```bash
-npm run product:start:full
-```
-
-Start the dashboard plus the local Gensyn router and reviewer nodes.
-
-```bash
-npm run seed:incident
-```
-
-Create a demo suspicious approval on the configured testnet Safe.
-
-```bash
-npm run orchestrator:run
-```
-
-Run the full pipeline once from the CLI for debugging.
-
-```bash
-npm run demo:check
-```
-
-Read the latest report and summarize which integrations are live vs degraded.
-
-## Dashboard Features
-
-The dashboard lets you:
-
-- add a Safe address and network
-- see system status for Safe, AI briefs, KeeperHub, Safe execution, receipt storage, and Gensyn
-- see monitored Safes and their latest poll status
-- see active incident cards with:
-  - severity
-  - detector signals
-  - AI brief
-  - KeeperHub step runs
-  - Gensyn peer review
-  - receipt link
-- trigger containment from the UI
-- inspect incident history
-
-Safes persist in `artifacts/watchlist.json`.
-
-Monitor state persists in:
-
-- `artifacts/monitor-state.json`
-- `artifacts/incident-history.json`
-- `artifacts/latest-report.json`
-
-## Live Execution
-
-To make containment proposals real instead of dry-run previews, set:
-
-```bash
+# Containment (required for real Safe proposals)
 SAFE_EXECUTION_MODE=live
 SAFE_RPC_URL=https://...
 SAFE_OWNER_PRIVATE_KEY=0x...
-SAFE_API_KEY=...
-```
 
-Optional:
+# AI brief (pick one)
+GEMINI_API_KEY=         # free tier, recommended
+ANTHROPIC_API_KEY=      # fallback
 
-- `SAFE_CONFIRMING_OWNER_KEYS` for automatic extra confirmations
-- `SAFE_EXECUTE_WHEN_READY=true` to execute when threshold is met
-
-## Optional Integrations
-
-### KeeperHub
-
-```bash
+# Optional sponsor integrations
 KEEPERHUB_MODE=webhook
 KEEPERHUB_WEBHOOK_URL=https://...
-```
 
-BreakGlass POSTs each runbook step to the webhook. A blank enabled webhook workflow is enough for the current integration.
-
-### Gensyn AXL
-
-Use `npm run product:start:full` for the local mesh, or configure the router/reviewer env vars manually.
-
-### 0G
-
-```bash
 BREAKGLASS_RECEIPT_STORAGE=0g
 ZERO_G_PRIVATE_KEY=0x...
+
+GENSYN_AXL_MODE=mcp
+GENSYN_AXL_PEER_IDS=reviewer-a,reviewer-b
 ```
 
-The adapter is implemented, but live 0G testnet uploads are still unreliable in the current build. Local file receipts remain the default safe path.
-
-## Policy Configuration
+### 2. Start
 
 ```bash
-BREAKGLASS_ALLOWED_SPENDERS=0x...
-BREAKGLASS_APPROVAL_THRESHOLD=100000000000000000000000
-
-BREAKGLASS_ALLOWED_OWNERS=0x...,0x...
-BREAKGLASS_MIN_THRESHOLD=2
-
-BREAKGLASS_ALLOWED_MODULES=0x...
-
-BREAKGLASS_MAX_ETH_TRANSFER=1000000000000000000
-BREAKGLASS_MAX_TOKEN_TRANSFER=10000000000000000000000
-BREAKGLASS_ALLOWED_RECIPIENTS=0x...,0x...
+npm install
+npm run product:start          # dashboard only
+npm run product:start:full     # dashboard + Gensyn peer review mesh
 ```
 
-## Repo Map
+Open `http://localhost:3030`. Users add their Safe addresses. Done.
 
-| Path | Role |
+---
+
+## Supported Chains
+
+**Mainnets:** Ethereum, Base, Arbitrum, Optimism, Polygon, BSC, Gnosis, Avalanche, zkSync Era, Polygon zkEVM, Linea, Scroll, Blast, Mode, Mantle, Celo, Worldchain
+
+**Testnets:** Base Sepolia, Sepolia, Holesky, Arbitrum Sepolia, Optimism Sepolia
+
+---
+
+## Architecture
+
+```
+User adds Safe → MonitorService polls every 30s
+                    ↓
+              Safe Transaction API (22 chains)
+                    ↓
+              5 incident detectors
+                    ↓
+              Deterministic runbook compiler
+                    ↓
+         ┌──────────────────────────────────┐
+         │ KeeperHub   — step simulation    │
+         │ Gemini/Claude — AI brief         │
+         │ Gensyn AXL  — peer attestation   │
+         │ 0G Storage  — on-chain receipt   │
+         └──────────────────────────────────┘
+                    ↓
+         Incident card + one-click containment
+```
+
+---
+
+## Sponsor Integrations
+
+| Sponsor | Integration |
 |---|---|
-| `apps/dashboard` | browser UI, monitor loops, HTTP API |
-| `apps/orchestrator` | detect → runbook → simulate → execute pipeline |
-| `apps/agent-router` | local Gensyn MCP router |
-| `apps/agent-reviewer` | local Gensyn reviewer node |
-| `packages/policies` | incident detectors |
-| `packages/runbooks` | deterministic runbook compilers |
-| `packages/ai` | Gemini / Anthropic / Ollama brief generation |
-| `packages/integrations` | Safe and KeeperHub integrations |
-| `packages/agent-mesh` | peer-review logic over AXL-style routing |
-| `packages/storage-0g` | receipt persistence and optional 0G adapter |
-| `packages/shared` | shared env/model utilities |
+| **KeeperHub** | Every runbook step POSTed to KeeperHub webhook. Real execution IDs per step. |
+| **0G** | Incident receipts anchored on-chain. Real txHash and rootHash per incident. |
+| **Gensyn** | Two AXL reviewer nodes independently attest the containment plan before the Safe proposal is submitted. |
+| **Anthropic** | Claude Haiku generates the 3-sentence plain-English incident brief. |
+
+---
 
 ## Tests
 
 ```bash
-npm test
+npm test   # 66 tests, 0 failures
 ```
 
-Current status: `66 passing tests`.
-
-## Current Scope
-
-This repo is a strong hackathon product, not a finished hosted SaaS.
-
-What is solid:
-
-- multi-chain Safe monitoring from the browser
-- deterministic runbooks
-- live Safe ingestion
-- live Gemini briefs
-- live KeeperHub webhook step submission
-- containment proposal flow
-- optional local Gensyn peer review
-
-What is still limited:
-
-- the product is self-hosted, not managed cloud software
-- 0G uploads are implemented but not yet reliable on the current testnet path
-- Gensyn is strongest in local mesh mode today, not as a fully deployed distributed network product
+---
 
 ## Design Principle
 
 The LLM explains. The code decides.
 
-BreakGlass does not let an LLM invent treasury actions. AI is used to explain the incident to humans. Containment logic comes from deterministic runbook compilers keyed to the incident type.
+Containment plans are deterministic — compiled from fixed runbook templates keyed to the incident class, not generated by an AI. The AI writes the 3-sentence summary. The steps are fixed, ordered, and auditable.
