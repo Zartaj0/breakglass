@@ -732,13 +732,13 @@ function deriveRuntimeStatus(env = process.env, incidents = []) {
       tone: safeApiLive ? "ok" : "warn",
     },
     aiBriefs: {
-      label: "AI Investigation",
+      label: "Investigation",
       value:
         !investigationConfigured
           ? "Disabled"
           : aiBriefDegraded
             ? `${investigatorProviderLabel} degraded`
-            : `${investigatorProviderLabel} live`,
+            : `${investigatorProviderLabel} configured`,
       tone:
         !investigationConfigured
           ? "muted"
@@ -831,45 +831,60 @@ function renderStep(step) {
 function renderToolCalls(toolCalls) {
   if (!toolCalls || toolCalls.length === 0) return "";
   const items = toolCalls.map((tc) => {
-    const resultPreview = JSON.stringify(tc.result ?? {}).slice(0, 120);
+    const resultPreview = JSON.stringify(tc.result ?? {}).slice(0, 160);
     return `<div class="tool-call">
       <span class="tool-name">${esc(tc.tool)}</span>
       <span class="tool-dur">${tc.durationMs ?? 0}ms</span>
-      <div class="tool-result">${esc(resultPreview)}${resultPreview.length >= 120 ? "..." : ""}</div>
+      <div class="tool-result">${esc(resultPreview)}${resultPreview.length >= 160 ? "…" : ""}</div>
     </div>`;
   }).join("");
-  return `<details class="tool-steps">
-    <summary>Agent steps (${toolCalls.length} tool calls)</summary>
+  return `<div class="tool-steps">
+    <div class="tool-steps-label">Agent evidence (${toolCalls.length} tool call${toolCalls.length !== 1 ? "s" : ""})</div>
     ${items}
-  </details>`;
+  </div>`;
 }
 
 function renderInvestigationSection(investigation, brief) {
-  if (!investigation || investigation.provider === "deterministic") {
-    // Fall back to old brief display
-    if (brief) return `<div class="ai-brief"><div class="ai-tag">AI Analysis</div><p>${esc(brief)}</p></div>`;
-    return `<p class="incident-summary">${esc("")}</p>`;
-  }
-
   const verdictColor = {
     HALT: "#dc2626",
     INVESTIGATE: "#d97706",
     APPROVE: "#16a34a",
-  }[investigation.verdict] ?? "#475569";
+  };
 
+  // Nothing at all — fall back to old brief if present
+  if (!investigation) {
+    if (brief) return `<div class="ai-brief"><div class="ai-tag">Analysis</div><p>${esc(brief)}</p></div>`;
+    return "";
+  }
+
+  const isDeterministic = investigation.provider === "deterministic";
+  const hasFindings = (investigation.keyFindings ?? []).length > 0;
+  const hasVerdict = Boolean(investigation.verdict);
+
+  // No useful data from either path
+  if (!hasFindings && !hasVerdict && !brief) return "";
+
+  const color = verdictColor[investigation.verdict] ?? "#475569";
   const findings = (investigation.keyFindings ?? [])
     .map((f) => `<li>${esc(f)}</li>`)
     .join("");
 
+  const headerLabel = isDeterministic ? "Risk Assessment" : "Investigation Agent";
+  const providerTag = isDeterministic ? "deterministic rules" : esc(investigation.provider ?? "");
+  const threatHypothesis = investigation.threatHypothesis
+    ? `<div class="threat-hyp">⚡ ${esc(investigation.threatHypothesis)}</div>`
+    : "";
+
   return `<div class="ai-brief">
     <div class="investigation-header">
-      <span class="ai-tag">Investigation Agent</span>
-      <span class="verdict-badge" style="background:${verdictColor}">${esc(investigation.verdict ?? "")}</span>
-      <span class="ai-provider-tag">${esc(investigation.provider ?? "")}</span>
+      <span class="ai-tag">${headerLabel}</span>
+      ${hasVerdict ? `<span class="verdict-badge" style="background:${color}">${esc(investigation.verdict)}</span>` : ""}
+      <span class="ai-provider-tag">${providerTag}</span>
     </div>
+    ${threatHypothesis}
     ${findings ? `<ul class="findings-list">${findings}</ul>` : ""}
     ${investigation.operatorRecommendation ? `<div class="operator-rec">${esc(investigation.operatorRecommendation)}</div>` : ""}
-    ${renderToolCalls(investigation.toolCalls)}
+    ${!isDeterministic ? renderToolCalls(investigation.toolCalls) : ""}
   </div>`;
 }
 
@@ -885,13 +900,15 @@ function renderIncidentCard(result) {
   const receiptHref = buildReceiptHref(result.receipt?.receiptId);
 
   const briefSection = renderInvestigationSection(investigation, brief);
-  const briefError = (investigation?.configured && investigation?.error && !investigation?.text)
+  const hasUsefulAssessment = (investigation?.keyFindings ?? []).length > 0 || investigation?.verdict;
+  const rawError = (investigation?.configured && investigation?.error && !investigation?.text)
     ? investigation.error
     : (!brief && briefStatus?.configured && briefStatus?.error)
       ? briefStatus.error
       : null;
-  const briefNotice = briefError
-    ? `<div class="brief-note">Investigation agent unavailable: ${esc(briefError)}</div>`
+  // Only surface the error when there's nothing else to show
+  const briefNotice = (rawError && !hasUsefulAssessment)
+    ? `<div class="brief-note">LLM unavailable — showing deterministic risk assessment. (${esc(rawError.slice(0, 90))}${rawError.length > 90 ? "…" : ""})</div>`
     : "";
 
   const peerSection = peerReview?.provider?.mode === "mcp"
@@ -1104,12 +1121,13 @@ code{font-family:"SFMono-Regular",Consolas,monospace;font-size:.83em;background:
 .findings-list li{font-size:.85rem;color:#1e293b;line-height:1.5}
 .operator-rec{font-size:.86rem;color:#475569;font-style:italic;margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9}
 .tool-steps{margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
-.tool-steps summary{font-size:.75rem;font-weight:600;color:#64748b;padding:6px 10px;cursor:pointer;background:#f8fafc}
-.tool-steps summary:hover{background:#f1f5f9}
+.tool-steps-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;padding:6px 10px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
 .tool-call{padding:6px 10px;border-top:1px solid #f1f5f9;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.tool-call:first-of-type{border-top:none}
 .tool-name{font-family:monospace;font-size:.78rem;font-weight:700;color:#7c3aed}
 .tool-dur{font-size:.72rem;color:#94a3b8}
 .tool-result{font-family:monospace;font-size:.72rem;color:#475569;width:100%;word-break:break-all}
+.threat-hyp{font-size:.85rem;font-weight:600;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-bottom:6px}
 .ai-brief p{font-size:.86rem;color:#1e293b;line-height:1.7}
 .brief-note{font-size:.78rem;color:#7c2d12;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 12px}
 .peer-row{display:flex;align-items:center;gap:8px;background:#f8fafc;border-radius:6px;padding:7px 12px;flex-wrap:wrap}

@@ -81,7 +81,7 @@ test("renders the dashboard page with safes and incidents", () => {
   assert.match(html, /Suspicious approval pending in Safe queue/);
   assert.match(html, /invalidate_pending_approval/);
   assert.match(html, /Gensyn AXL/);
-  assert.match(html, /AI Analysis/);
+  assert.match(html, /Analysis/);
   assert.match(html, /seen 2x/);
   assert.match(html, /System Status/);
   assert.match(html, /Incident History/);
