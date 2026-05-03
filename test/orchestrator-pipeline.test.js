@@ -25,16 +25,20 @@ test("runs the incident pipeline end to end in dry-run mode", async () => {
     BREAKGLASS_ARTIFACT_DIR: artifactDir,
   });
 
-  assert.equal(report.incidentsDetected, 1);
-  assert.equal(report.incidents.length, 1);
-  assert.equal(report.incidents[0].runbook.steps[0].kind, "invalidate_pending_approval");
-  assert.equal(report.incidents[0].execution.status, "prepared");
-  assert.equal(report.incidents[0].receipt.storagePointer.kind, "local_file");
+  assert.equal(report.incidentsDetected, 3);
+  assert.equal(report.incidents.length, 3);
+  const approvalIncident = report.incidents.find(
+    (entry) => entry.incident.triggerType === "suspicious_approval",
+  );
+  assert.ok(approvalIncident);
+  assert.equal(approvalIncident.runbook.steps[0].kind, "invalidate_pending_approval");
+  assert.equal(approvalIncident.execution.status, "prepared");
+  assert.equal(approvalIncident.receipt.storagePointer.kind, "local_file");
   assert.match(
     JSON.stringify(report.readiness.fallbackWarnings),
     /safe_ingestion_fixture_mode/,
   );
-  assert.equal(fs.existsSync(report.incidents[0].localReceiptPath), true);
+  assert.equal(fs.existsSync(approvalIncident.localReceiptPath), true);
   assert.equal(fs.existsSync(report.reportPath), true);
 });
 
