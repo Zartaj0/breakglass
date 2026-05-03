@@ -77,6 +77,8 @@ test("renders the dashboard page with safes and incidents", () => {
   assert.match(html, /Active Incidents/);
   assert.match(html, /Start Monitoring/);
   assert.match(html, /Seed Demo Incident/);
+  assert.match(html, /Load Novel Threat Demo/);
+  assert.match(html, /Mark Reviewed Safe/);
   assert.match(html, /Propose Containment/);
   assert.match(html, /Suspicious approval pending in Safe queue/);
   assert.match(html, /invalidate_pending_approval/);
@@ -388,6 +390,44 @@ test("MonitorService stores resolved incidents in history", async () => {
   assert.equal(monitor.history[0].history.state, "resolved");
 });
 
+test("markIncidentReviewedSafe suppresses an active incident and moves it to reviewed-safe history", async () => {
+  const monitor = new MonitorService({
+    artifactDir: makeArtifactDir(),
+    autoStartPolling: false,
+    now: () => new Date("2026-04-28T00:00:00.000Z"),
+    runIncidentPipeline: async () => ({
+      transactionsScanned: 1,
+      incidents: [
+        {
+          incident: {
+            incidentId: "incident-review-safe-1",
+            title: "Unknown transaction requires investigation",
+            summary: "review before signing",
+            severity: "medium",
+            triggerType: "unknown_transaction",
+            safeAddress: "0xfeed",
+            network: "base-sepolia",
+          },
+          brief: null,
+          runbook: { steps: [] },
+          peerReview: { provider: { mode: "disabled" } },
+          execution: null,
+          receipt: { createdAt: "2026-04-28T00:00:00.000Z", receiptId: "receipt-review-safe-1" },
+          cache: { reused: false },
+        },
+      ],
+    }),
+  });
+
+  await monitor.addSafe("0xFEED", "base-sepolia", false);
+  await monitor._poll("0xfeed");
+
+  const result = await monitor.markIncidentReviewedSafe("incident-review-safe-1");
+  assert.equal(result.ok, true);
+  assert.equal(monitor.incidents.length, 0);
+  assert.equal(monitor.history[0].history.state, "reviewed_safe");
+});
+
 // ---------------------------------------------------------------------------
 // HTTP API — handleRequest
 // ---------------------------------------------------------------------------
@@ -542,6 +582,55 @@ test("POST /api/demo/seed seeds a demo incident and refreshes monitoring", async
     ["addSafe", "0xSeed123", "base-sepolia"],
     ["forcePoll", "0xSeed123"],
   ]);
+});
+
+test("POST /api/demo/novel loads the fixture-backed novel threat demo", async () => {
+  let called = false;
+  const monitor = {
+    loadFixtureDemo: async () => {
+      called = true;
+      return {
+        safeAddress: "0x7A5b0F2a641fD36f8450eD8D3B4E8A1D6339a4F5",
+        network: "base-sepolia",
+        incidentKinds: ["unknown_transaction"],
+      };
+    },
+    safes: [],
+    incidents: [],
+    history: [],
+    artifactDir: makeArtifactDir(),
+  };
+
+  const req = makeReq("POST", "/api/demo/novel");
+  const res = makeRes();
+  await handleRequest(req, res, monitor);
+
+  assert.equal(called, true);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body().ok, true);
+  assert.deepEqual(res.body().seeded.incidentKinds, ["unknown_transaction"]);
+});
+
+test("POST /api/incidents/:id/mark-safe marks an incident as reviewed safe", async () => {
+  let seenIncidentId = null;
+  const monitor = {
+    markIncidentReviewedSafe: async (incidentId) => {
+      seenIncidentId = incidentId;
+      return { ok: true, incidentId, status: "reviewed_safe" };
+    },
+    safes: [],
+    incidents: [],
+    history: [],
+    artifactDir: makeArtifactDir(),
+  };
+
+  const req = makeReq("POST", "/api/incidents/incident-safe-1/mark-safe");
+  const res = makeRes();
+  await handleRequest(req, res, monitor);
+
+  assert.equal(seenIncidentId, "incident-safe-1");
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body().status, "reviewed_safe");
 });
 
 test("DELETE /api/safes/:addr removes a safe", async () => {

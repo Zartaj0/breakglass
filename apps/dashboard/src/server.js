@@ -31,6 +31,12 @@ const INCIDENT_REUSE_WINDOW_MS = 5 * 60_000;
 const WATCHLIST_FILENAME = "watchlist.json";
 const MONITOR_STATE_FILENAME = "monitor-state.json";
 const INCIDENT_HISTORY_FILENAME = "incident-history.json";
+const NOVEL_DEMO_FIXTURE_PATH = path.join(
+  "apps",
+  "watcher",
+  "fixtures",
+  "novel-transaction.json",
+);
 const EXECUTION_FINAL_STATUSES = new Set([
   "executed",
   "already_executed",
@@ -52,6 +58,14 @@ function clonePlainData(value) {
 function toPositiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function resolveWorkspacePath(relativeOrAbsolutePath) {
+  if (path.isAbsolute(relativeOrAbsolutePath)) {
+    return relativeOrAbsolutePath;
+  }
+
+  return path.resolve(process.cwd(), relativeOrAbsolutePath);
 }
 
 function buildIncidentStateMap(incidents = []) {
@@ -95,6 +109,7 @@ class MonitorService {
     this._now = options.now ?? (() => new Date());
     this._snapshotBySafe = new Map();
     this._historyByIncidentId = new Map();
+    this._suppressedIncidentIds = new Set();
     this._autoStartPolling = options.autoStartPolling !== false;
   }
 
@@ -154,7 +169,7 @@ class MonitorService {
     }
   }
 
-  async addSafe(address, network, persist = true, snapshot = null) {
+  async addSafe(address, network, persist = true, snapshot = null, options = {}) {
     const normalized = address.trim().toLowerCase();
     if (this._safes.has(normalized)) return { ok: false, reason: "already_monitored" };
 
@@ -171,6 +186,9 @@ class MonitorService {
       error: snapshot?.error ?? null,
       addedAt: snapshot?.addedAt ?? this._now().toISOString(),
       lastResolvedAt: snapshot?.lastResolvedAt ?? null,
+      sourceMode: options.sourceMode ?? snapshot?.sourceMode ?? "live",
+      fixturePath: options.fixturePath ?? snapshot?.fixturePath ?? null,
+      isDemo: options.isDemo ?? snapshot?.isDemo ?? false,
       _incidentResultsById: buildIncidentStateMap(restoredIncidents),
       _pollPromise: null,
     };
@@ -213,6 +231,64 @@ class MonitorService {
 
   findIncident(incidentId) {
     return this.incidents.find((entry) => entry.incident?.incidentId === incidentId) ?? null;
+  }
+
+  async loadFixtureDemo(options = {}) {
+    const fixturePath = resolveWorkspacePath(
+      options.fixturePath ?? NOVEL_DEMO_FIXTURE_PATH,
+    );
+    const raw = await fs.readFile(fixturePath, "utf8");
+    const payload = JSON.parse(raw);
+    const firstTransaction =
+      payload?.transactions?.[0] ??
+      payload?.results?.[0] ??
+      payload?.[0] ??
+      null;
+
+    if (!firstTransaction?.safe) {
+      throw new Error("Novel demo fixture is missing a Safe address.");
+    }
+
+    const safeAddress = String(firstTransaction.safe).trim();
+    const network =
+      String(
+        options.network ??
+          process.env.BREAKGLASS_DEMO_FIXTURE_NETWORK ??
+          "base-sepolia",
+      )
+        .trim()
+        .toLowerCase();
+
+    const addResult = await this.addSafe(
+      safeAddress,
+      network,
+      false,
+      null,
+      {
+        sourceMode: "fixture",
+        fixturePath,
+        isDemo: true,
+      },
+    );
+
+    if (!addResult.ok && addResult.reason !== "already_monitored") {
+      throw new Error(addResult.reason ?? "Failed to add fixture-backed demo Safe.");
+    }
+
+    const pollResult = await this.forcePoll(safeAddress);
+    if (!pollResult.ok) {
+      throw new Error(pollResult.reason ?? "Failed to poll fixture-backed demo Safe.");
+    }
+
+    return {
+      safeAddress,
+      network,
+      fixturePath,
+      incidentKinds: this.incidents
+        .filter((entry) => entry.incident?.safeAddress?.toLowerCase() === safeAddress.toLowerCase())
+        .map((entry) => entry.incident?.triggerType)
+        .filter(Boolean),
+    };
   }
 
   async recordContainmentResult(incidentId, executionArtifact) {
@@ -295,6 +371,12 @@ class MonitorService {
           this._snapshotBySafe.set(entry.address.trim().toLowerCase(), entry);
         }
       }
+
+      for (const incidentId of payload.suppressedIncidentIds ?? []) {
+        if (incidentId) {
+          this._suppressedIncidentIds.add(String(incidentId));
+        }
+      }
     } catch {
       // no monitor snapshot yet — fine
     }
@@ -323,6 +405,7 @@ class MonitorService {
       await fs.mkdir(this._artifactDir, { recursive: true });
       const payload = {
         generatedAt: this._now().toISOString(),
+        suppressedIncidentIds: Array.from(this._suppressedIncidentIds),
         safes: this.safes.map((state) => ({
           address: state.address,
           network: state.network,
@@ -334,6 +417,9 @@ class MonitorService {
           error: state.error,
           addedAt: state.addedAt,
           lastResolvedAt: state.lastResolvedAt ?? null,
+          sourceMode: state.sourceMode ?? "live",
+          fixturePath: state.fixturePath ?? null,
+          isDemo: state.isDemo ?? false,
         })),
       };
       await fs.writeFile(
@@ -404,10 +490,67 @@ class MonitorService {
     });
   }
 
+  _recalculateStateStatus(state) {
+    const severities = state.incidents.map((r) => r.incident?.severity);
+    if (severities.includes("critical")) state.status = "critical";
+    else if (severities.includes("high")) state.status = "threat";
+    else if (severities.length > 0) state.status = "warning";
+    else state.status = "safe";
+  }
+
+  async markIncidentReviewedSafe(incidentId) {
+    const nowIso = this._now().toISOString();
+
+    for (const state of this._safes.values()) {
+      const index = state.incidents.findIndex(
+        (entry) => entry.incident?.incidentId === incidentId,
+      );
+
+      if (index === -1) {
+        continue;
+      }
+
+      const incidentEntry = clonePlainData(state.incidents[index]);
+      const previousHistory = this._historyByIncidentId.get(incidentId)?.history ?? {};
+
+      this._suppressedIncidentIds.add(incidentId);
+      state.incidents.splice(index, 1);
+      state._incidentResultsById.delete(incidentId);
+      state.lastResolvedAt = nowIso;
+      this._recalculateStateStatus(state);
+
+      this._historyByIncidentId.set(incidentId, {
+        ...incidentEntry,
+        history: {
+          state: "reviewed_safe",
+          firstSeenAt:
+            incidentEntry.monitor?.firstSeenAt ??
+            previousHistory.firstSeenAt ??
+            nowIso,
+          lastSeenAt:
+            incidentEntry.monitor?.lastSeenAt ??
+            previousHistory.lastSeenAt ??
+            nowIso,
+          updatedAt: nowIso,
+          resolvedAt: nowIso,
+        },
+      });
+
+      await this._saveSnapshot();
+      await this._saveHistory();
+
+      return { ok: true, incidentId, status: "reviewed_safe" };
+    }
+
+    return { ok: false, reason: "not_found" };
+  }
+
   _mergeIncidentResults(previousResults, nextResults, nowIso) {
     const previousById = buildIncidentStateMap(previousResults);
 
-    return nextResults.map((result) => {
+    return nextResults
+      .filter((result) => !this._suppressedIncidentIds.has(result.incident?.incidentId))
+      .map((result) => {
       const incidentId = result.incident?.incidentId;
       const previous = previousById.get(incidentId) ?? null;
       const previousMonitor = previous?.monitor ?? {};
@@ -452,12 +595,19 @@ class MonitorService {
       refreshRuntimeEnv();
       const env = {
         ...process.env,
-        SAFE_PENDING_SOURCE: "live",
+        SAFE_PENDING_SOURCE:
+          String(state.sourceMode ?? "live").trim().toLowerCase() === "fixture"
+            ? "fixture"
+            : "live",
         SAFE_ADDRESS: state.address,
         SAFE_NETWORK: state.network,
         SAFE_API_CHAIN: state.chain,
         BREAKGLASS_AUTO_EXECUTE_FIRST_STEP: "false",
       };
+
+      if (state.fixturePath) {
+        env.WATCHER_FIXTURE_PATH = state.fixturePath;
+      }
 
       const existingResultsByIncidentId = Object.fromEntries(
         Array.from(state._incidentResultsById.entries()).map(([incidentId, result]) => [
@@ -512,11 +662,7 @@ class MonitorService {
         }
       }
 
-      const severities = state.incidents.map((r) => r.incident?.severity);
-      if (severities.includes("critical")) state.status = "critical";
-      else if (severities.includes("high")) state.status = "threat";
-      else if (severities.length > 0) state.status = "warning";
-      else state.status = "safe";
+      this._recalculateStateStatus(state);
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err);
       state.status = "error";
@@ -659,6 +805,8 @@ function deriveHistoryUi(entry) {
   switch (entry.history?.state) {
     case "contained":
       return { label: "Contained", color: "#16a34a", bg: "#f0fdf4" };
+    case "reviewed_safe":
+      return { label: "Reviewed Safe", color: "#2563eb", bg: "#eff6ff" };
     case "resolved":
       return { label: "Resolved", color: "#2563eb", bg: "#eff6ff" };
     default:
@@ -682,6 +830,12 @@ function deriveDemoControls(env = process.env) {
     seedReady,
     safeAddress: config.safeAddress ?? null,
     network: config.network ?? null,
+    novelReady: true,
+    novelNetwork: String(
+      env.BREAKGLASS_DEMO_FIXTURE_NETWORK ?? "base-sepolia",
+    )
+      .trim()
+      .toLowerCase(),
   };
 }
 
@@ -933,6 +1087,7 @@ function renderIncidentCard(result) {
   const receiptSection = receiptHref
     ? `<a class="receipt-link" href="${esc(receiptHref)}" target="_blank" rel="noreferrer">View receipt JSON</a>`
     : "";
+  const reviewSafeAction = `<button class="btn-mark-safe" data-id="${esc(incident.incidentId)}">Mark Reviewed Safe</button>`;
 
   return `<div class="card" style="border-left:4px solid ${sev.color};background:${sev.bg}">
     <div class="card-header">
@@ -952,6 +1107,7 @@ function renderIncidentCard(result) {
     <div class="steps">${steps.map(renderStep).join("")}</div>
     <div class="card-footer">
       <button class="btn-contain" data-id="${esc(incident.incidentId)}" ${containmentUi.disabled ? "disabled" : ""}>${esc(containmentUi.buttonLabel)}</button>
+      ${reviewSafeAction}
       ${receiptSection}
       <span class="inc-id">ID: <code>${esc(incident.incidentId)}</code></span>
       <span class="result-msg ${containmentUi.message ? "result-ok" : ""}" id="result-${esc(incident.incidentId)}">${esc(containmentUi.message ?? "")}</span>
@@ -1007,7 +1163,9 @@ function renderPage(safes, allIncidents, options = {}) {
   const metrics = options.metrics ?? {
     monitoredSafeCount: safes.length,
     activeIncidentCount: allIncidents.length,
-    resolvedIncidentCount: historyEntries.filter((entry) => entry.history?.state === "resolved").length,
+    resolvedIncidentCount: historyEntries.filter((entry) =>
+      entry.history?.state === "resolved" || entry.history?.state === "reviewed_safe",
+    ).length,
   };
   const networkOptions = `
     <optgroup label="Mainnets">
@@ -1146,9 +1304,11 @@ code{font-family:"SFMono-Regular",Consolas,monospace;font-size:.83em;background:
 .step-desc{font-size:.84rem;color:#1e293b;line-height:1.5}
 .step-meta{font-size:.75rem;color:#64748b;margin-top:3px}
 .card-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.btn-contain{padding:8px 18px;background:#0f172a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:.86rem;font-weight:600}
+.btn-contain,.btn-mark-safe{padding:8px 18px;background:#0f172a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:.86rem;font-weight:600}
 .btn-contain:hover{background:#1e293b}
-.btn-contain:disabled{opacity:.5;cursor:default}
+.btn-mark-safe{background:#fff;color:#0f172a;border:1px solid #cbd5e1}
+.btn-mark-safe:hover{background:#f8fafc}
+.btn-contain:disabled,.btn-mark-safe:disabled{opacity:.5;cursor:default}
 .receipt-link{font-size:.8rem;color:#2563eb;text-decoration:none;font-weight:600}
 .receipt-link:hover{text-decoration:underline}
 .inc-id{font-size:.72rem;color:#94a3b8}
@@ -1188,11 +1348,13 @@ code{font-family:"SFMono-Regular",Consolas,monospace;font-size:.83em;background:
     </div>
     <div class="add-row demo-row">
       <button class="btn-add btn-secondary" id="demo-seed-btn" ${demoControls.seedReady ? "" : "disabled"}>Seed Demo Incident</button>
+      <button class="btn-add btn-secondary" id="demo-novel-btn" ${demoControls.novelReady ? "" : "disabled"}>Load Novel Threat Demo</button>
       <span class="demo-note">${
         demoControls.seedReady
           ? `Seeds a suspicious approval on ${esc(demoControls.network)} for ${esc(demoControls.safeAddress?.slice(0, 10) ?? "")}...`
           : "Seed demo incident is unavailable until SAFE demo credentials are configured on the server."
       }</span>
+      <span class="demo-note">Loads a fixture-backed MultiSend delegatecall on ${esc(demoControls.novelNetwork)} and routes it through unknown-transaction investigation.</span>
     </div>
     <div class="msg" id="msg"></div>
   </div>
@@ -1247,6 +1409,25 @@ if (demoSeedBtn) {
   });
 }
 
+const demoNovelBtn = document.getElementById('demo-novel-btn');
+if (demoNovelBtn) {
+  demoNovelBtn.addEventListener('click', async () => {
+    demoNovelBtn.textContent='Loading...';
+    demoNovelBtn.disabled=true;
+    setMsg('Loading the novel MultiSend threat demo and refreshing the monitor...','');
+    const r = await fetch('/api/demo/novel',{method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      setMsg('Novel threat demo loaded. Refreshing in 5s.','ok');
+      setTimeout(()=>location.reload(),5000);
+      return;
+    }
+    setMsg(d.error||'Failed to load the novel threat demo.','err');
+    demoNovelBtn.textContent='Load Novel Threat Demo';
+    demoNovelBtn.disabled=false;
+  });
+}
+
 document.getElementById('addr-in').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('add-btn').click(); });
 
 document.getElementById('safes-list').addEventListener('click', async e => {
@@ -1258,15 +1439,30 @@ document.getElementById('safes-list').addEventListener('click', async e => {
 
 document.getElementById('incidents-list').addEventListener('click', async e => {
   const btn = e.target.closest('.btn-contain');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  btn.textContent='Proposing...'; btn.disabled=true;
-  const r = await fetch('/api/incidents/'+encodeURIComponent(id)+'/contain',{method:'POST'});
-  const d = await r.json();
-  const el = document.getElementById('result-'+id);
-  if (el) { el.textContent = d.ok ? (d.status||'Proposed') : (d.error||'Failed'); el.className='result-msg '+(d.ok?'result-ok':'result-err'); }
-  if (!d.ok) { btn.textContent='Propose Containment'; btn.disabled=false; return; }
-  btn.textContent = d.status === 'executed' ? 'Containment Executed' : 'Containment Proposed';
+  const markSafeBtn = e.target.closest('.btn-mark-safe');
+
+  if (btn) {
+    const id = btn.dataset.id;
+    btn.textContent='Proposing...'; btn.disabled=true;
+    const r = await fetch('/api/incidents/'+encodeURIComponent(id)+'/contain',{method:'POST'});
+    const d = await r.json();
+    const el = document.getElementById('result-'+id);
+    if (el) { el.textContent = d.ok ? (d.status||'Proposed') : (d.error||'Failed'); el.className='result-msg '+(d.ok?'result-ok':'result-err'); }
+    if (!d.ok) { btn.textContent='Propose Containment'; btn.disabled=false; return; }
+    btn.textContent = d.status === 'executed' ? 'Containment Executed' : 'Containment Proposed';
+    return;
+  }
+
+  if (markSafeBtn) {
+    const id = markSafeBtn.dataset.id;
+    markSafeBtn.textContent='Saving...'; markSafeBtn.disabled=true;
+    const r = await fetch('/api/incidents/'+encodeURIComponent(id)+'/mark-safe',{method:'POST'});
+    const d = await r.json();
+    const el = document.getElementById('result-'+id);
+    if (el) { el.textContent = d.ok ? 'Marked reviewed safe. Removing from active incidents...' : (d.error||'Failed'); el.className='result-msg '+(d.ok?'result-ok':'result-err'); }
+    if (!d.ok) { markSafeBtn.textContent='Mark Reviewed Safe'; markSafeBtn.disabled=false; return; }
+    setTimeout(()=>location.reload(),1500);
+  }
 });
 
 setTimeout(()=>location.reload(), 30000);
@@ -1311,7 +1507,9 @@ async function handleRequest(req, res, monitor) {
         metrics: {
           monitoredSafeCount: monitor.safes.length,
           activeIncidentCount: monitor.incidents.length,
-          resolvedIncidentCount: monitor.history.filter((entry) => entry.history?.state === "resolved").length,
+          resolvedIncidentCount: monitor.history.filter((entry) =>
+            entry.history?.state === "resolved" || entry.history?.state === "reviewed_safe",
+          ).length,
         },
       }),
     );
@@ -1381,6 +1579,21 @@ async function handleRequest(req, res, monitor) {
     }
   }
 
+  if (req.method === "POST" && p === "/api/demo/novel") {
+    try {
+      const seeded = await monitor.loadFixtureDemo();
+      return sendJson(res, 200, {
+        ok: true,
+        seeded,
+      });
+    } catch (err) {
+      return sendJson(res, 500, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const containMatch = p.match(/^\/api\/incidents\/([^/]+)\/contain$/);
   if (req.method === "POST" && containMatch) {
     const incidentId = decodeURIComponent(containMatch[1]);
@@ -1410,6 +1623,25 @@ async function handleRequest(req, res, monitor) {
     } catch (err) {
       return sendJson(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
     }
+  }
+
+  const markSafeMatch = p.match(/^\/api\/incidents\/([^/]+)\/mark-safe$/);
+  if (req.method === "POST" && markSafeMatch) {
+    const incidentId = decodeURIComponent(markSafeMatch[1]);
+    const result = await monitor.markIncidentReviewedSafe(incidentId);
+    return sendJson(
+      res,
+      result.ok ? 200 : 404,
+      result.ok
+        ? result
+        : {
+            ok: false,
+            error:
+              result.reason === "not_found"
+                ? "Incident not found."
+                : "Failed to mark incident as reviewed safe.",
+          },
+    );
   }
 
   // Legacy compatibility

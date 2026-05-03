@@ -88,7 +88,7 @@ npm run product:start:full     # dashboard + Gensyn peer review mesh
 npm run demo:start             # same as product:start:full, best local demo entrypoint
 ```
 
-Open `http://localhost:3030`. Users add their Safe addresses. For the hackathon demo, use the in-app `Seed Demo Incident` button to create a suspicious approval and refresh the monitor without leaving the browser.
+Open `http://localhost:3030`. Users add their Safe addresses. For the hackathon demo, use the in-app `Seed Demo Incident` button for the deterministic suspicious-approval flow, or `Load Novel Threat Demo` to show the agent investigating a hidden MultiSend delegatecall without leaving the browser.
 
 ---
 
