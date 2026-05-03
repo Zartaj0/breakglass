@@ -5,7 +5,11 @@ const path = require("node:path");
 const { loadDotEnv } = require("../../../packages/shared/src/load-env");
 const { SAFE_API_CHAIN_SLUGS } = require("../../../packages/integrations/src/safe-client");
 const { runIncidentPipeline } = require("../../orchestrator/src/pipeline");
-const { resolveBriefConfig } = require("../../../packages/ai/src/brief");
+const { resolveInvestigatorConfig } = require("../../../packages/ai/src/investigator");
+const {
+  resolveSeedConfig,
+  seedSuspiciousApproval,
+} = require("../../../scripts/seed-demo-incident");
 const {
   readReceiptMirror,
   resolveReceiptStorageConfig,
@@ -34,6 +38,11 @@ const EXECUTION_FINAL_STATUSES = new Set([
   "proposed_waiting_for_confirmations",
   "prepared",
   "blocked_by_peer_review",
+]);
+const EXECUTABLE_STEP_KINDS = new Set([
+  "invalidate_pending_approval",
+  "invalidate_pending_transaction",
+  "revoke_approval",
 ]);
 
 function clonePlainData(value) {
@@ -568,6 +577,7 @@ const TRIGGER_LABELS = {
   threshold_reduction: "Threshold Reduction",
   module_enablement: "Module Enablement",
   large_transfer: "Large Transfer",
+  unknown_transaction: "Unknown Transaction",
 };
 
 const STEP_ICONS = {
@@ -580,10 +590,24 @@ const STEP_ICONS = {
   audit_module_code: "🔍",
   verify_recipient_ownership: "✓",
   investigate_transfer_origin: "🔎",
+  investigate_unknown_transaction: "🧠",
+  collect_proposer_explanation: "🗣",
+  escalate_human_review: "👤",
 };
 
 function deriveContainmentUi(result) {
   const executionStatus = result.execution?.status ?? null;
+  const firstRunbookStep = result.runbook?.steps?.[0] ?? null;
+  const hasExecutableFirstStep =
+    firstRunbookStep && EXECUTABLE_STEP_KINDS.has(firstRunbookStep.kind);
+
+  if (!hasExecutableFirstStep) {
+    return {
+      buttonLabel: "Human Review Required",
+      disabled: true,
+      message: "This incident requires investigation and manual operator review before containment.",
+    };
+  }
 
   switch (executionStatus) {
     case "executed":
@@ -642,9 +666,40 @@ function deriveHistoryUi(entry) {
   }
 }
 
+function deriveDemoControls(env = process.env) {
+  const config = resolveSeedConfig(env);
+  const seedReady = Boolean(
+    config.safeAddress &&
+      config.network &&
+      config.rpcUrl &&
+      config.ownerPrivateKey &&
+      config.txServiceUrl &&
+      config.tokenAddress &&
+      config.spender,
+  );
+
+  return {
+    seedReady,
+    safeAddress: config.safeAddress ?? null,
+    network: config.network ?? null,
+  };
+}
+
+function describeInvestigatorProvider(config) {
+  const providers = [];
+  if (config.geminiApiKey) providers.push("gemini");
+  if (config.anthropicApiKey) providers.push("anthropic");
+  if (config.nvidiaApiKey) providers.push("nvidia");
+  if (config.mistralApiKey) providers.push("mistral");
+  if (config.openrouterApiKey) providers.push("openrouter");
+  return providers.length > 0 ? providers.join(" -> ") : "disabled";
+}
+
 function deriveRuntimeStatus(env = process.env, incidents = []) {
   const safeApiLive = Boolean(env.SAFE_API_KEY);
-  const briefConfig = resolveBriefConfig(env);
+  const investigatorConfig = resolveInvestigatorConfig(env);
+  const investigatorProviderLabel = describeInvestigatorProvider(investigatorConfig);
+  const investigationConfigured = investigatorProviderLabel !== "disabled";
   const keeperhubWebhook =
     String(env.KEEPERHUB_MODE ?? "local").trim().toLowerCase() === "webhook" &&
     Boolean(env.KEEPERHUB_WEBHOOK_URL);
@@ -677,15 +732,15 @@ function deriveRuntimeStatus(env = process.env, incidents = []) {
       tone: safeApiLive ? "ok" : "warn",
     },
     aiBriefs: {
-      label: "AI Briefs",
+      label: "AI Investigation",
       value:
-        briefConfig.provider === "disabled"
+        !investigationConfigured
           ? "Disabled"
           : aiBriefDegraded
-            ? `${briefConfig.provider} degraded`
-            : `${briefConfig.provider} live`,
+            ? `${investigatorProviderLabel} degraded`
+            : `${investigatorProviderLabel} live`,
       tone:
-        briefConfig.provider === "disabled"
+        !investigationConfigured
           ? "muted"
           : aiBriefDegraded
             ? "warn"
@@ -931,6 +986,7 @@ function renderSafeRow(state) {
 function renderPage(safes, allIncidents, options = {}) {
   const historyEntries = options.historyEntries ?? [];
   const runtimeStatus = options.runtimeStatus ?? deriveRuntimeStatus();
+  const demoControls = options.demoControls ?? deriveDemoControls();
   const metrics = options.metrics ?? {
     monitoredSafeCount: safes.length,
     activeIncidentCount: allIncidents.length,
@@ -1013,6 +1069,10 @@ code{font-family:"SFMono-Regular",Consolas,monospace;font-size:.83em;background:
 .msg.ok{color:#16a34a}.msg.err{color:#dc2626}
 .btn-add{padding:8px 18px;background:#0f172a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:.88rem;font-weight:600}
 .btn-add:hover{background:#1e293b}
+.btn-secondary{background:#fff;color:#0f172a;border:1px solid #cbd5e1}
+.btn-secondary:hover{background:#f8fafc}
+.demo-row{margin-top:10px;align-items:center}
+.demo-note{font-size:.8rem;color:#64748b}
 .btn-sm{padding:4px 10px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;font-size:.78rem}
 .btn-sm:hover{background:#e2e8f0}
 .btn-rm{color:#dc2626}
@@ -1108,6 +1168,14 @@ code{font-family:"SFMono-Regular",Consolas,monospace;font-size:.83em;background:
       <select id="net-sel">${networkOptions}</select>
       <button class="btn-add" id="add-btn">Start Monitoring</button>
     </div>
+    <div class="add-row demo-row">
+      <button class="btn-add btn-secondary" id="demo-seed-btn" ${demoControls.seedReady ? "" : "disabled"}>Seed Demo Incident</button>
+      <span class="demo-note">${
+        demoControls.seedReady
+          ? `Seeds a suspicious approval on ${esc(demoControls.network)} for ${esc(demoControls.safeAddress?.slice(0, 10) ?? "")}...`
+          : "Seed demo incident is unavailable until SAFE demo credentials are configured on the server."
+      }</span>
+    </div>
     <div class="msg" id="msg"></div>
   </div>
 </div>
@@ -1141,6 +1209,25 @@ document.getElementById('add-btn').addEventListener('click', async () => {
   if (d.ok) { setMsg('Safe added. First poll running — refreshing in 5s.','ok'); document.getElementById('addr-in').value=''; setTimeout(()=>location.reload(),5000); }
   else setMsg(d.reason||'Failed.','err');
 });
+
+const demoSeedBtn = document.getElementById('demo-seed-btn');
+if (demoSeedBtn) {
+  demoSeedBtn.addEventListener('click', async () => {
+    demoSeedBtn.textContent='Seeding...';
+    demoSeedBtn.disabled=true;
+    setMsg('Seeding a suspicious approval and refreshing the monitor...','');
+    const r = await fetch('/api/demo/seed',{method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      setMsg('Demo incident seeded. Refreshing in 5s.','ok');
+      setTimeout(()=>location.reload(),5000);
+      return;
+    }
+    setMsg(d.error||'Failed to seed demo incident.','err');
+    demoSeedBtn.textContent='Seed Demo Incident';
+    demoSeedBtn.disabled=false;
+  });
+}
 
 document.getElementById('addr-in').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('add-btn').click(); });
 
@@ -1247,6 +1334,35 @@ async function handleRequest(req, res, monitor) {
     return sendJson(res, 200, { history: monitor.history });
   }
 
+  if (req.method === "POST" && p === "/api/demo/seed") {
+    try {
+      const seedIncident = monitor.seedIncident ?? seedSuspiciousApproval;
+      const seeded = await seedIncident();
+
+      if (seeded?.safeAddress && seeded?.network) {
+        const addResult = await monitor.addSafe(seeded.safeAddress, seeded.network);
+        if (!addResult.ok && addResult.reason !== "already_monitored") {
+          throw new Error(addResult.reason ?? "Failed to monitor seeded Safe.");
+        }
+
+        const pollResult = await monitor.forcePoll(seeded.safeAddress);
+        if (!pollResult.ok) {
+          throw new Error(pollResult.reason ?? "Failed to poll seeded Safe.");
+        }
+      }
+
+      return sendJson(res, 200, {
+        ok: true,
+        seeded,
+      });
+    } catch (err) {
+      return sendJson(res, 500, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const containMatch = p.match(/^\/api\/incidents\/([^/]+)\/contain$/);
   if (req.method === "POST" && containMatch) {
     const incidentId = decodeURIComponent(containMatch[1]);
@@ -1264,11 +1380,12 @@ async function handleRequest(req, res, monitor) {
       const {
         resolveSafeExecutionConfig,
         executeMitigationStep,
-        isExecutableStep,
       } = require("../../../packages/integrations/src/safe-remediation");
       const executionConfig = resolveSafeExecutionConfig(process.env);
-      const firstStep = (found.runbook?.steps ?? []).find((s) => isExecutableStep(s));
-      if (!firstStep) return sendJson(res, 200, { ok: false, error: "No executable step in runbook." });
+      const firstStep = found.runbook?.steps?.[0] ?? null;
+      if (!firstStep || !EXECUTABLE_STEP_KINDS.has(firstStep.kind)) {
+        return sendJson(res, 200, { ok: false, error: "No executable first step in runbook." });
+      }
       const result = await executeMitigationStep(firstStep, found.incident, executionConfig);
       await monitor.recordContainmentResult(incidentId, result);
       return sendJson(res, 200, { ok: true, ...result });

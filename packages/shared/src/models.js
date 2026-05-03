@@ -16,6 +16,7 @@ const INCIDENT_TRIGGER_TYPES = {
   THRESHOLD_REDUCTION: "threshold_reduction",
   MODULE_ENABLEMENT: "module_enablement",
   LARGE_TRANSFER: "large_transfer",
+  UNKNOWN_TRANSACTION: "unknown_transaction",
 };
 
 const INCIDENT_SOURCE_STAGE = {

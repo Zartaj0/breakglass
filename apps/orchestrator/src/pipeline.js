@@ -43,7 +43,8 @@ function clonePlainData(value) {
 }
 
 function selectFirstExecutableStep(runbook) {
-  return runbook.steps.find((step) => isExecutableStep(step));
+  const firstStep = runbook?.steps?.[0] ?? null;
+  return firstStep && isExecutableStep(firstStep) ? firstStep : null;
 }
 
 function buildPipelineOptions(options = {}) {

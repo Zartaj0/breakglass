@@ -4,6 +4,7 @@ const { compileOwnershipChangeRunbook } = require("./ownership-change");
 const { compileThresholdReductionRunbook } = require("./threshold-reduction");
 const { compileModuleEnablementRunbook } = require("./module-enablement");
 const { compileLargeTransferRunbook } = require("./large-transfer");
+const { compileUnknownTransactionRunbook } = require("./unknown-transaction");
 
 const RUNBOOK_COMPILERS = {
   [INCIDENT_TRIGGER_TYPES.SUSPICIOUS_APPROVAL]: compileApprovalExposureRunbook,
@@ -11,6 +12,7 @@ const RUNBOOK_COMPILERS = {
   [INCIDENT_TRIGGER_TYPES.THRESHOLD_REDUCTION]: compileThresholdReductionRunbook,
   [INCIDENT_TRIGGER_TYPES.MODULE_ENABLEMENT]: compileModuleEnablementRunbook,
   [INCIDENT_TRIGGER_TYPES.LARGE_TRANSFER]: compileLargeTransferRunbook,
+  [INCIDENT_TRIGGER_TYPES.UNKNOWN_TRANSACTION]: compileUnknownTransactionRunbook,
 };
 
 function compileRunbook(incident) {

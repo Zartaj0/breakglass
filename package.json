@@ -11,6 +11,7 @@
     "dashboard:dev": "node apps/dashboard/src/server.js",
     "product:start": "node scripts/start-local-product.js",
     "product:start:full": "node scripts/start-local-product.js --with-gensyn",
+    "demo:start": "node scripts/start-local-product.js --with-gensyn",
     "router:serve": "node apps/agent-router/src/server.js",
     "reviewer:serve": "node apps/agent-reviewer/src/server.js",
     "gensyn:mesh": "node scripts/start-gensyn-dev-mesh.js",

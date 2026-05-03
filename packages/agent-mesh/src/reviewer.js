@@ -1,5 +1,6 @@
 const {
   INCIDENT_SOURCE_STAGE,
+  INCIDENT_TRIGGER_TYPES,
   asArray,
   toStringValue,
 } = require("../../shared/src/models");
@@ -51,12 +52,16 @@ function buildReviewReasons(incident, firstStep, expectedFirstStepKind) {
   const reasons = [];
   const riskSignals = asArray(incident.evidence?.reasons);
   const riskCodes = riskSignals.map((signal) => signal.code);
+  const triggerType = incident?.triggerType;
 
-  if (incident.sourceStage === INCIDENT_SOURCE_STAGE.PENDING_TRANSACTION) {
+  if (
+    incident.sourceStage === INCIDENT_SOURCE_STAGE.PENDING_TRANSACTION &&
+    expectedFirstStepKind?.startsWith("invalidate_pending")
+  ) {
     reasons.push({
-      code: "pending_tx_requires_nonce_rejection",
+      code: "pending_tx_requires_containment",
       message:
-        "The approval is still pending in the Safe queue, so invalidating that nonce is the correct first containment action.",
+        "The transaction is still pending in the Safe queue, so blocking it before more owners sign is the correct first containment action.",
     });
   }
 
@@ -72,7 +77,7 @@ function buildReviewReasons(incident, firstStep, expectedFirstStepKind) {
     });
   }
 
-  if (riskCodes.includes("unknown_spender")) {
+  if (triggerType === INCIDENT_TRIGGER_TYPES.SUSPICIOUS_APPROVAL && riskCodes.includes("unknown_spender")) {
     reasons.push({
       code: "unknown_spender_confirmed",
       message:
@@ -80,7 +85,7 @@ function buildReviewReasons(incident, firstStep, expectedFirstStepKind) {
     });
   }
 
-  if (riskCodes.includes("unlimited_approval")) {
+  if (triggerType === INCIDENT_TRIGGER_TYPES.SUSPICIOUS_APPROVAL && riskCodes.includes("unlimited_approval")) {
     reasons.push({
       code: "unlimited_approval_confirmed",
       message:
@@ -88,15 +93,77 @@ function buildReviewReasons(incident, firstStep, expectedFirstStepKind) {
     });
   }
 
-  if (riskCodes.includes("high_value_approval")) {
+  if (triggerType === INCIDENT_TRIGGER_TYPES.SUSPICIOUS_APPROVAL && riskCodes.includes("high_value_approval")) {
     reasons.push({
       code: "high_value_threshold_crossed",
       message:
         "The approval amount exceeds the configured risk threshold.",
+      });
+  }
+
+  if (triggerType === INCIDENT_TRIGGER_TYPES.OWNERSHIP_CHANGE) {
+    reasons.push({
+      code: "ownership_change_requires_review",
+      message:
+        "Changing the Safe owner set alters treasury control, so rejecting the pending owner-set transaction is the safest first step.",
+    });
+  }
+
+  if (triggerType === INCIDENT_TRIGGER_TYPES.THRESHOLD_REDUCTION) {
+    reasons.push({
+      code: "threshold_change_requires_review",
+      message:
+        "Lowering the Safe threshold weakens signature requirements, so blocking the pending threshold change is the correct first response.",
+    });
+  }
+
+  if (triggerType === INCIDENT_TRIGGER_TYPES.MODULE_ENABLEMENT) {
+    reasons.push({
+      code: "module_enablement_requires_review",
+      message:
+        "Enabling a Safe module can grant unrestricted execution powers, so the pending enablement should be blocked first.",
+    });
+  }
+
+  if (triggerType === INCIDENT_TRIGGER_TYPES.LARGE_TRANSFER) {
+    reasons.push({
+      code: "large_transfer_requires_review",
+      message:
+        "A large pending transfer should be blocked first so the destination and intent can be verified before funds move.",
+    });
+  }
+
+  if (triggerType === INCIDENT_TRIGGER_TYPES.UNKNOWN_TRANSACTION) {
+    reasons.push({
+      code: "unknown_transaction_investigation_first",
+      message:
+        "This transaction did not match a deterministic incident class, so an investigation-first runbook is appropriate before any automated containment.",
     });
   }
 
   return reasons;
+}
+
+function resolveExpectedFirstStepKind(incident) {
+  if (!incident) {
+    return null;
+  }
+
+  switch (incident.triggerType) {
+    case INCIDENT_TRIGGER_TYPES.SUSPICIOUS_APPROVAL:
+      return incident.sourceStage === INCIDENT_SOURCE_STAGE.PENDING_TRANSACTION
+        ? "invalidate_pending_approval"
+        : "revoke_approval";
+    case INCIDENT_TRIGGER_TYPES.OWNERSHIP_CHANGE:
+    case INCIDENT_TRIGGER_TYPES.THRESHOLD_REDUCTION:
+    case INCIDENT_TRIGGER_TYPES.MODULE_ENABLEMENT:
+    case INCIDENT_TRIGGER_TYPES.LARGE_TRANSFER:
+      return "invalidate_pending_transaction";
+    case INCIDENT_TRIGGER_TYPES.UNKNOWN_TRANSACTION:
+      return "investigate_unknown_transaction";
+    default:
+      return null;
+  }
 }
 
 function reviewIncidentAgainstRunbook(
@@ -107,16 +174,13 @@ function reviewIncidentAgainstRunbook(
   const reviewerLabel = toStringValue(options.reviewerLabel, "unnamed-reviewer");
   const reviewerId = toStringValue(options.reviewerId, "local-reviewer");
   const firstStep = runbook?.steps?.[0] ?? null;
-  const expectedFirstStepKind =
-    incident?.sourceStage === INCIDENT_SOURCE_STAGE.PENDING_TRANSACTION
-      ? "invalidate_pending_approval"
-      : "revoke_approval";
+  const expectedFirstStepKind = resolveExpectedFirstStepKind(incident);
 
   let recommendation = "approve";
 
   if (!incident || !runbook) {
     recommendation = "halt";
-  } else if (incident.triggerType !== "suspicious_approval") {
+  } else if (!expectedFirstStepKind) {
     recommendation = "halt";
   } else if (!firstStep) {
     recommendation = "halt";
@@ -146,8 +210,8 @@ function reviewIncidentAgainstRunbook(
     reasons,
     summary:
       recommendation === "approve"
-        ? `${reviewerLabel} independently approved ${expectedFirstStepKind} as the first containment step.`
-        : `${reviewerLabel} halted automation because the proposed first step did not match the deterministic containment rule.`,
+        ? `${reviewerLabel} independently approved ${expectedFirstStepKind} as the correct first step for ${incident?.triggerType ?? "this incident"}.`
+        : `${reviewerLabel} halted automation because the proposed first step did not match the deterministic incident-response rule.`,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -202,7 +266,7 @@ function handleReviewerRpc(requestBody, options = {}) {
     }
 
     const aiConfig = options.aiConfig ?? null;
-    const useAi = aiConfig && aiConfig.provider !== "disabled";
+    const useAi = aiConfig && hasReviewerLlmProvider(aiConfig);
 
     if (useAi) {
       return reviewIncidentWithAI(args.incident, args.runbook, options).then((review) =>
@@ -230,8 +294,10 @@ function handleReviewerRpc(requestBody, options = {}) {
 const GEMINI_REVIEWER_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const ANTHROPIC_REVIEWER_URL = "https://api.anthropic.com/v1/messages";
 const REVIEWER_TIMEOUT_MS = 7000;
-
 const NVIDIA_REVIEWER_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const MISTRAL_REVIEWER_URL = "https://api.mistral.ai/v1/chat/completions";
+const OPENROUTER_REVIEWER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_FREE_MODEL = "google/gemma-3-27b-it:free";
 
 function resolveAiReviewerConfig(env = process.env) {
   return {
@@ -243,37 +309,60 @@ function resolveAiReviewerConfig(env = process.env) {
     nvidiaModel: env.NVIDIA_MODEL ?? "meta/llama-3.1-8b-instruct",
     mistralApiKey: env.MISTRAL ?? null,
     mistralModel: env.MISTRAL_MODEL ?? "mistral-small-latest",
+    openrouterApiKey: env.OPENROUTER ?? null,
+    openrouterModels: (env.OPENROUTER_MODELS ?? OPENROUTER_FREE_MODEL)
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
   };
 }
+
+function hasReviewerLlmProvider(config = {}) {
+  return Boolean(
+    config.geminiApiKey ||
+      config.anthropicApiKey ||
+      config.nvidiaApiKey ||
+      config.mistralApiKey ||
+      config.openrouterApiKey,
+  );
+}
+
+const TRIGGER_CONTEXT = {
+  suspicious_approval: "A suspicious token approval is pending. The proposed response blocks it by invalidating the pending nonce.",
+  ownership_change: "A pending ownership modification (add/remove/swap owner) was detected. The proposed response rejects the pending transaction before it can be signed by enough owners.",
+  threshold_reduction: "A pending Safe threshold reduction was detected. The proposed response blocks it to prevent weakening the multisig signature requirement.",
+  module_enablement: "A pending Safe module enablement was detected. Enabled modules can execute arbitrary transactions. The proposed response blocks the enablement.",
+  large_transfer: "A large pending asset transfer was detected. The proposed response blocks it pending destination verification.",
+  unknown_transaction: "A pending transaction that does not match any known attack class was detected. The investigation agent has assessed it. The proposed response routes it to human review before any signatures are added.",
+};
 
 function buildAiReviewPrompt(incident, runbook, deterministicReview) {
   const firstStep = runbook?.steps?.[0];
   const reasons = (incident?.evidence?.reasons ?? [])
     .map((r) => `  - ${r.code}: ${r.message}`)
     .join("\n");
+  const triggerContext = TRIGGER_CONTEXT[incident?.triggerType] ?? "A suspicious Safe transaction was detected.";
 
   return `You are an independent security reviewer for a Safe multisig treasury wallet.
 
-CONTEXT: BreakGlass has detected a suspicious pending transaction in the Safe queue. It has NOT been executed yet. The system wants to block it by proposing a rejection transaction at the same nonce.
+CONTEXT: ${triggerContext}
 
 INCIDENT DETAILS:
-- Trigger: ${incident?.triggerType ?? "unknown"} (severity: ${incident?.severity ?? "unknown"})
+- Incident class: ${incident?.triggerType ?? "unknown"} (severity: ${incident?.severity ?? "unknown"})
 - Safe: ${incident?.safeAddress} on ${incident?.network}
-- Risk signals detected:\n${reasons || "  none"}
+- Risk signals:\n${reasons || "  none"}
 
-PROPOSED AUTOMATED RESPONSE:
-Step: ${firstStep?.kind ?? "none"}
-Action: ${firstStep?.description ?? ""}
-Deterministic engine says: ${deterministicReview.recommendation.toUpperCase()}
+PROPOSED RESPONSE PLAN:
+First step: ${firstStep?.kind ?? "none"}
+Description: ${firstStep?.description ?? ""}
+Deterministic engine verdict: ${deterministicReview.recommendation.toUpperCase()}
 
-YOUR TASK: Independently verify whether the automated response plan is correct.
-- "approve" = the plan is sensible, go ahead with the containment
-- "halt" = something is wrong with the plan, a human must review before proceeding
+YOUR TASK: Independently verify whether the proposed response plan is correct for this incident class.
+- "approve" = the plan is the right response — proceed
+- "halt" = the plan is incorrect or incomplete — a human must review before anything executes
 
 Respond with ONLY this JSON — no other text:
-{"recommendation":"approve","confidence":0.88,"reasoning":"one sentence explaining your verdict","agreedWithDeterministic":true}
-
-Note: approving a suspicious-approval containment plan means you agree the Safe should block this pending transaction. This is the correct response for unknown or risky approvals.`;
+{"recommendation":"approve","confidence":0.88,"reasoning":"one sentence explaining your verdict","agreedWithDeterministic":true}`;
 }
 
 function parseAiReviewResponse(text) {
@@ -288,8 +377,6 @@ function parseAiReviewResponse(text) {
 }
 
 async function callReviewerLlm(prompt, config) {
-  const MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions";
-
   const providers = [];
   if (config.geminiApiKey) {
     providers.push(async () => {
@@ -301,7 +388,10 @@ async function callReviewerLlm(prompt, config) {
       });
       if (!res.ok) throw new Error(`Gemini ${res.status}`);
       const d = await res.json();
-      return (d?.candidates?.[0]?.content?.parts ?? []).filter((p) => p.text).map((p) => p.text).join("").trim();
+      return {
+        provider: "gemini",
+        text: (d?.candidates?.[0]?.content?.parts ?? []).filter((p) => p.text).map((p) => p.text).join("").trim(),
+      };
     });
   }
   if (config.anthropicApiKey) {
@@ -314,7 +404,10 @@ async function callReviewerLlm(prompt, config) {
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message ?? `Anthropic ${res.status}`); }
       const d = await res.json();
-      return (d?.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("").trim();
+      return {
+        provider: "anthropic",
+        text: (d?.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("").trim(),
+      };
     });
   }
   if (config.nvidiaApiKey) {
@@ -327,12 +420,15 @@ async function callReviewerLlm(prompt, config) {
       });
       if (!res.ok) throw new Error(`Nvidia ${res.status}`);
       const d = await res.json();
-      return (d?.choices ?? []).map((c) => c.message?.content ?? "").join("").trim();
+      return {
+        provider: "nvidia",
+        text: (d?.choices ?? []).map((c) => c.message?.content ?? "").join("").trim(),
+      };
     });
   }
   if (config.mistralApiKey) {
     providers.push(async () => {
-      const res = await fetch(MISTRAL_URL, {
+      const res = await fetch(MISTRAL_REVIEWER_URL, {
         method: "POST",
         headers: { "content-type": "application/json", "authorization": `Bearer ${config.mistralApiKey}` },
         body: JSON.stringify({ model: config.mistralModel ?? "mistral-small-latest", max_tokens: 256, temperature: 0.1, messages: [{ role: "user", content: prompt }] }),
@@ -340,14 +436,45 @@ async function callReviewerLlm(prompt, config) {
       });
       if (!res.ok) throw new Error(`Mistral ${res.status}`);
       const d = await res.json();
-      return d?.choices?.[0]?.message?.content?.trim() ?? null;
+      return {
+        provider: "mistral",
+        text: d?.choices?.[0]?.message?.content?.trim() ?? null,
+      };
     });
+  }
+  if (config.openrouterApiKey) {
+    for (const model of config.openrouterModels ?? [OPENROUTER_FREE_MODEL]) {
+      providers.push(async () => {
+        const res = await fetch(OPENROUTER_REVIEWER_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "authorization": `Bearer ${config.openrouterApiKey}`,
+            "http-referer": "https://breakglass.xyz",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 256,
+            temperature: 0.1,
+            messages: [{ role: "user", content: prompt }],
+          }),
+          signal: AbortSignal.timeout(REVIEWER_TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`OpenRouter ${res.status}`);
+        const d = await res.json();
+        if (d.error) throw new Error(d.error.message ?? "OpenRouter error");
+        return {
+          provider: "openrouter",
+          text: d?.choices?.[0]?.message?.content?.trim() ?? null,
+        };
+      });
+    }
   }
 
   for (const fn of providers) {
     try {
-      const text = await fn();
-      if (text) return text;
+      const result = await fn();
+      if (result?.text) return result;
     } catch {
       // try next
     }
@@ -360,17 +487,29 @@ async function reviewIncidentWithAI(incident, runbook, options = {}) {
   const deterministicReview = reviewIncidentAgainstRunbook(incident, runbook, options);
   const aiConfig = options.aiConfig ?? resolveAiReviewerConfig({});
 
-  if (aiConfig.provider === "disabled") {
-    return deterministicReview;
+  if (!hasReviewerLlmProvider(aiConfig)) {
+    return {
+      ...deterministicReview,
+      aiReasoning: null,
+      aiProvider: null,
+      aiEnhanced: false,
+    };
   }
 
   try {
     const prompt = buildAiReviewPrompt(incident, runbook, deterministicReview);
-    const rawText = await callReviewerLlm(prompt, aiConfig);
+    const llmResult = await callReviewerLlm(prompt, aiConfig);
+    const rawText = llmResult?.text ?? null;
     const parsed = parseAiReviewResponse(rawText);
+    const aiProvider = llmResult?.provider ?? null;
 
     if (!parsed) {
-      return { ...deterministicReview, aiReasoning: rawText, aiProvider: aiConfig.provider, aiEnhanced: true };
+      return {
+        ...deterministicReview,
+        aiReasoning: rawText,
+        aiProvider,
+        aiEnhanced: Boolean(rawText),
+      };
     }
 
     const aiRecommendation = parsed.recommendation === "halt" ? "halt" : "approve";
@@ -391,7 +530,7 @@ async function reviewIncidentWithAI(incident, runbook, options = {}) {
         ? `${reviewerLabel}: ${parsed.reasoning}`
         : deterministicReview.summary,
       aiReasoning: parsed.reasoning ?? null,
-      aiProvider: aiConfig.provider,
+      aiProvider,
       aiEnhanced: true,
       aiAgreedWithDeterministic: parsed.agreedWithDeterministic ?? null,
     };

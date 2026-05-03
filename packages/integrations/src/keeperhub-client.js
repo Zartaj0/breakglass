@@ -62,6 +62,19 @@ function buildLocalSimulationResult(step, incident) {
           options: step.metadata?.options ?? [],
         },
       };
+    case "investigate_unknown_transaction":
+      return {
+        status: "investigation_required",
+        summary:
+          "This transaction did not match a deterministic containment class. Investigation agent and operator review should run before any containment action is proposed.",
+        artifact: {
+          ...base,
+          actionability: "review",
+          expectedOutcome: "risk verdict and human decision",
+          target: step.metadata?.target ?? null,
+          method: step.metadata?.method ?? null,
+        },
+      };
     default:
       return {
         status: "review_required",

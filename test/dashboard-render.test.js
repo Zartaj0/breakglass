@@ -76,6 +76,7 @@ test("renders the dashboard page with safes and incidents", () => {
   assert.match(html, /Monitored Safes/);
   assert.match(html, /Active Incidents/);
   assert.match(html, /Start Monitoring/);
+  assert.match(html, /Seed Demo Incident/);
   assert.match(html, /Propose Containment/);
   assert.match(html, /Suspicious approval pending in Safe queue/);
   assert.match(html, /invalidate_pending_approval/);
@@ -154,6 +155,44 @@ test("renders KeeperHub fallback reason when webhook simulation degrades", () =>
 
   assert.match(html, /KeeperHub fallback/i);
   assert.match(html, /Workflow is disabled/i);
+});
+
+test("renders human-review-only incidents without an active containment button", () => {
+  const html = renderPage([], [
+    {
+      incident: {
+        incidentId: "incident-unknown-1",
+        title: "Uncategorized Safe transaction requires investigation",
+        summary: "Opaque calldata to an unknown target did not match a deterministic class.",
+        severity: "high",
+        triggerType: "unknown_transaction",
+        safeAddress: "0xsafeaddress1234567890",
+        network: "base-sepolia",
+      },
+      brief: null,
+      investigation: {
+        provider: "nvidia",
+        configured: true,
+        verdict: "INVESTIGATE",
+        keyFindings: ["Opaque calldata"],
+        operatorRecommendation: "Pause signing and review intent.",
+        toolCalls: [],
+      },
+      runbook: {
+        steps: [
+          {
+            kind: "investigate_unknown_transaction",
+            description: "Investigate this transaction before further signatures are added.",
+          },
+        ],
+      },
+      peerReview: { provider: { mode: "disabled" } },
+      monitor: {},
+    },
+  ]);
+
+  assert.match(html, /Human Review Required/);
+  assert.match(html, /Unknown Transaction/);
 });
 
 // ---------------------------------------------------------------------------
@@ -469,6 +508,40 @@ test("GET /api/report returns serializable monitor state", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body().safes[0].address, "0xaaa111");
   assert.equal(res.body().runtimeStatus.safeApi.label, "Safe API");
+});
+
+test("POST /api/demo/seed seeds a demo incident and refreshes monitoring", async () => {
+  const calls = [];
+  const monitor = {
+    seedIncident: async () => ({
+      safeAddress: "0xSeed123",
+      network: "base-sepolia",
+      safeTxHash: "0xseedtx",
+    }),
+    addSafe: async (address, network) => {
+      calls.push(["addSafe", address, network]);
+      return { ok: true };
+    },
+    forcePoll: async (address) => {
+      calls.push(["forcePoll", address]);
+      return { ok: true };
+    },
+    safes: [],
+    incidents: [],
+    history: [],
+    artifactDir: makeArtifactDir(),
+  };
+
+  const req = makeReq("POST", "/api/demo/seed");
+  const res = makeRes();
+  await handleRequest(req, res, monitor);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body().ok, true);
+  assert.deepEqual(calls, [
+    ["addSafe", "0xSeed123", "base-sepolia"],
+    ["forcePoll", "0xSeed123"],
+  ]);
 });
 
 test("DELETE /api/safes/:addr removes a safe", async () => {

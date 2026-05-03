@@ -13,11 +13,18 @@ const {
   compileApprovalExposureRunbook,
 } = require("../packages/runbooks/src/approval-exposure");
 const {
+  compileOwnershipChangeRunbook,
+} = require("../packages/runbooks/src/ownership-change");
+const {
   buildPeerReviewBlockArtifact,
   resolveAgentMeshConfig,
   reviewIncidentWithPeers,
   shouldAllowExecution,
 } = require("../packages/agent-mesh/src/axl-client");
+const {
+  reviewIncidentAgainstRunbook,
+  reviewIncidentWithAI,
+} = require("../packages/agent-mesh/src/reviewer");
 
 function buildFixtureIncident() {
   const fixture = JSON.parse(
@@ -129,4 +136,54 @@ test("peer review can block execution when quorum is not met", () => {
 
   assert.equal(block.status, "blocked_by_peer_review");
   assert.equal(block.peerReview.requiredApprovals, 2);
+});
+
+test("reviewIncidentWithAI stays deterministic when no LLM provider is configured", async () => {
+  const incident = buildFixtureIncident();
+  const runbook = compileApprovalExposureRunbook(incident);
+
+  const review = await reviewIncidentWithAI(incident, runbook, {
+    reviewerLabel: "reviewer-a",
+    aiConfig: {},
+  });
+
+  assert.equal(review.recommendation, "approve");
+  assert.equal(review.aiEnhanced, false);
+  assert.equal(review.aiProvider, null);
+});
+
+test("reviewIncidentAgainstRunbook approves ownership-change containment when first step matches", () => {
+  const incident = {
+    triggerType: "ownership_change",
+    severity: "critical",
+    sourceStage: "pending_transaction",
+    evidence: {
+      reasons: [{ code: "unknown_owner_addition", message: "owner not allowlisted" }],
+    },
+  };
+  const runbook = compileOwnershipChangeRunbook({
+    incidentId: "incident-own-1",
+    safeAddress: "0xabc",
+    network: "base-sepolia",
+    triggerType: "ownership_change",
+    sourceStage: "pending_transaction",
+    evidence: {
+      ownership: {
+        method: "addOwnerWithThreshold",
+        affectedOwner: "0xdef",
+        newThreshold: 1,
+      },
+    },
+    source: {
+      safeTxHash: "0xown",
+      transaction: { nonce: 4, safeTxHash: "0xown" },
+    },
+  });
+
+  const review = reviewIncidentAgainstRunbook(incident, runbook, {
+    reviewerLabel: "reviewer-b",
+  });
+
+  assert.equal(review.recommendation, "approve");
+  assert.equal(review.expectedFirstStepKind, "invalidate_pending_transaction");
 });
