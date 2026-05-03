@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BreakGlass — Logo Explorations</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=DM+Serif+Display:ital@0;1&family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Bebas+Neue&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet">
+<script type="text/babel" src="design-canvas.jsx"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; font-family: 'Space Grotesk', sans-serif; }
+
+  /* Shared logo label style */
+  .logo-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 20px;
+    opacity: 0.4;
+    text-align: center;
+  }
+
+  /* ── LOGO 1: Glass Break Shield ── */
+  .logo1-wrap {
+    background: #060b14;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 48px;
+    height: 100%;
+  }
+  .logo1-mark {
+    position: relative;
+    width: 96px;
+    height: 96px;
+  }
+  .logo1-wordmark {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .logo1-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    color: #e8f4ff;
+  }
+  .logo1-name span {
+    color: #3b82f6;
+  }
+  .logo1-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: #3b82f6;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  /* ── LOGO 2: Emergency Reticle ── */
+  .logo2-wrap {
+    background: #0d0d0d;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    padding: 48px;
+    height: 100%;
+  }
+  .logo2-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 32px;
+    letter-spacing: 0.06em;
+    color: #fff;
+    text-transform: uppercase;
+    position: relative;
+  }
+  .logo2-name::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: #ef4444;
+  }
+  .logo2-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: #ef4444;
+    text-transform: uppercase;
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  /* ── LOGO 3: Vault Light ── */
+  .logo3-wrap {
+    background: #0f0c08;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 48px;
+    height: 100%;
+  }
+  .logo3-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 42px;
+    letter-spacing: 0.12em;
+    color: #f5e6c8;
+    line-height: 1;
+  }
+  .logo3-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    color: #c9933a;
+    text-transform: uppercase;
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  /* ── LOGO 4: Minimal Sentinel ── */
+  .logo4-wrap {
+    background: #f5f4f2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 48px;
+    height: 100%;
+  }
+  .logo4-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 300;
+    font-size: 26px;
+    letter-spacing: 0.18em;
+    color: #111;
+    text-transform: uppercase;
+  }
+  .logo4-name strong {
+    font-weight: 700;
+  }
+  .logo4-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    color: #666;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* ── LOGO 5: Editorial ── */
+  .logo5-wrap {
+    background: #0a0a0a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 48px;
+    height: 100%;
+  }
+  .logo5-top {
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 13px;
+    letter-spacing: 0.35em;
+    color: #888;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .logo5-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 48px;
+    color: #fff;
+    line-height: 0.95;
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+  .logo5-name .break-line {
+    display: block;
+    color: #d4a843;
+  }
+  .logo5-name .glass-line {
+    display: block;
+    color: #fff;
+  }
+  .logo5-divider {
+    width: 60px;
+    height: 1px;
+    background: #d4a843;
+  }
+  .logo5-sub {
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    font-size: 13px;
+    letter-spacing: 0.22em;
+    color: #888;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* Common dark label */
+  .label-light { color: #888; }
+  .label-dark { color: #444; }
+</style>
+</head>
+<body>
+<script type="text/babel">
+
+/* ══════════════════════════════════════════════════
+   LOGO 1 — Glass Break Shield
+   Dark blue-black, shield SVG with crack fracture,
+   clean tech sans-serif wordmark
+═══════════════════════════════════════════════════ */
+function Logo1() {
+  return (
+    <div className="logo1-wrap">
+      <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
+        <defs>
+          <linearGradient id="shieldGrad" x1="48" y1="0" x2="48" y2="96" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#1d4ed8" />
+            <stop offset="100%" stopColor="#1e3a8a" />
+          </linearGradient>
+          <linearGradient id="crackGlow" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#60a5fa" stopOpacity="0" />
+            <stop offset="50%" stopColor="#93c5fd" stopOpacity="1" />
+            <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
+          </linearGradient>
+          <filter id="shieldGlow">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        {/* Shield body */}
+        <path d="M48 6L12 20V50C12 68 28 82 48 90C68 82 84 68 84 50V20L48 6Z"
+          fill="url(#shieldGrad)" stroke="#3b82f6" strokeWidth="1.5" />
+        {/* Inner shield highlight */}
+        <path d="M48 14L19 26V50C19 64 31 76 48 83C65 76 77 64 77 50V26L48 14Z"
+          fill="none" stroke="#1d4ed8" strokeWidth="0.5" opacity="0.6" />
+        {/* Glass crack fracture */}
+        <g filter="url(#shieldGlow)">
+          <path d="M48 30L42 44L50 46L40 66" stroke="url(#crackGlow)" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M42 44L36 50" stroke="#60a5fa" strokeWidth="1" strokeLinecap="round" opacity="0.5" />
+          <path d="M50 46L56 52" stroke="#60a5fa" strokeWidth="1" strokeLinecap="round" opacity="0.5" />
+          <path d="M46 38L38 34" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" opacity="0.3" />
+        </g>
+        {/* Accent dot at crack origin */}
+        <circle cx="48" cy="30" r="2.5" fill="#93c5fd" opacity="0.9" />
+      </svg>
+
+      <div className="logo1-wordmark">
+        <div className="logo1-name">BREAK<span>GLASS</span></div>
+        <div className="logo1-sub">Treasury Incident Response</div>
+      </div>
+      <p className="logo-label label-light">01 — Shield Fracture</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   LOGO 2 — Emergency Reticle
+   Pure black, bold circular reticle/target mark,
+   red accent, uppercase Syne wordmark
+═══════════════════════════════════════════════════ */
+function Logo2() {
+  return (
+    <div className="logo2-wrap">
+      <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+        <defs>
+          <filter id="redGlow2">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        {/* Outer rings */}
+        <circle cx="40" cy="40" r="36" stroke="#ef4444" strokeWidth="1.5" opacity="0.3" />
+        <circle cx="40" cy="40" r="28" stroke="#ef4444" strokeWidth="1" opacity="0.5" />
+        {/* Cross hairs — gaps at cardinal points */}
+        <line x1="4" y1="40" x2="22" y2="40" stroke="#ef4444" strokeWidth="1.5" />
+        <line x1="58" y1="40" x2="76" y2="40" stroke="#ef4444" strokeWidth="1.5" />
+        <line x1="40" y1="4" x2="40" y2="22" stroke="#ef4444" strokeWidth="1.5" />
+        <line x1="40" y1="58" x2="40" y2="76" stroke="#ef4444" strokeWidth="1.5" />
+        {/* Inner circle */}
+        <circle cx="40" cy="40" r="14" stroke="#ef4444" strokeWidth="2" filter="url(#redGlow2)" />
+        {/* Crack lines through center */}
+        <g filter="url(#redGlow2)">
+          <path d="M40 30L36 37L42 40L34 52" stroke="#ff6b6b" strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
+          <path d="M36 37L30 35" stroke="#ff6b6b" strokeWidth="0.8" strokeLinecap="round" opacity="0.5" />
+          <path d="M42 40L48 42" stroke="#ff6b6b" strokeWidth="0.8" strokeLinecap="round" opacity="0.5" />
+        </g>
+        {/* Center dot */}
+        <circle cx="40" cy="40" r="3" fill="#ef4444" filter="url(#redGlow2)" />
+        {/* Corner brackets */}
+        <path d="M8 16 L8 8 L16 8" stroke="#ef4444" strokeWidth="1.5" fill="none" opacity="0.6" />
+        <path d="M72 16 L72 8 L64 8" stroke="#ef4444" strokeWidth="1.5" fill="none" opacity="0.6" />
+        <path d="M8 64 L8 72 L16 72" stroke="#ef4444" strokeWidth="1.5" fill="none" opacity="0.6" />
+        <path d="M72 64 L72 72 L64 72" stroke="#ef4444" strokeWidth="1.5" fill="none" opacity="0.6" />
+      </svg>
+
+      <div>
+        <div className="logo2-name">BREAKGLASS</div>
+        <div className="logo2-sub">24/7 Incident Response</div>
+      </div>
+      <p className="logo-label label-light">02 — Emergency Reticle</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   LOGO 3 — Vault Light
+   Warm dark, vault/safe with door cracked open,
+   amber light spilling through, Bebas Neue wordmark
+═══════════════════════════════════════════════════ */
+function Logo3() {
+  return (
+    <div className="logo3-wrap">
+      <svg width="100" height="80" viewBox="0 0 100 80" fill="none">
+        <defs>
+          <radialGradient id="vaultLight" cx="30%" cy="50%" r="70%">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.6" />
+            <stop offset="60%" stopColor="#c9933a" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#92400e" stopOpacity="0" />
+          </radialGradient>
+          <filter id="glowAmber">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        {/* Vault body - rectangular */}
+        <rect x="8" y="8" width="72" height="64" rx="4" fill="#1a1208" stroke="#6b4c1a" strokeWidth="1.5" />
+
+        {/* Door - slightly ajar, rotated open */}
+        <g transform="rotate(-8, 8, 40)">
+          <rect x="8" y="8" width="44" height="64" rx="3" fill="#2a1e0c" stroke="#c9933a" strokeWidth="1.5" />
+          {/* Bolts on door */}
+          <circle cx="20" cy="22" r="3.5" fill="none" stroke="#c9933a" strokeWidth="1.2" />
+          <circle cx="20" cy="58" r="3.5" fill="none" stroke="#c9933a" strokeWidth="1.2" />
+          {/* Combination wheel */}
+          <circle cx="35" cy="40" r="10" fill="#1a1208" stroke="#c9933a" strokeWidth="1.5" />
+          <circle cx="35" cy="40" r="6" fill="#1a1208" stroke="#c9933a" strokeWidth="0.8" />
+          {/* Wheel spokes */}
+          {[0, 60, 120, 180, 240, 300].map((deg, i) => (
+            <line key={i}
+              x1="35" y1="40"
+              x2={35 + 9 * Math.cos(deg * Math.PI / 180)}
+              y2={40 + 9 * Math.sin(deg * Math.PI / 180)}
+              stroke="#c9933a" strokeWidth="0.8" opacity="0.7"
+            />
+          ))}
+        </g>
+
+        {/* Light bleeding through crack */}
+        <rect x="50" y="8" width="30" height="64" rx="0" fill="url(#vaultLight)" />
+
+        {/* Light crack line */}
+        <line x1="52" y1="8" x2="52" y2="72" stroke="#f59e0b" strokeWidth="2.5"
+          filter="url(#glowAmber)" opacity="0.9" />
+
+        {/* Handle */}
+        <rect x="54" y="35" width="12" height="10" rx="2"
+          fill="none" stroke="#c9933a" strokeWidth="1.5" />
+
+        {/* Corner bolt circles on main vault */}
+        <circle cx="86" cy="20" r="3" fill="none" stroke="#6b4c1a" strokeWidth="1" />
+        <circle cx="86" cy="60" r="3" fill="none" stroke="#6b4c1a" strokeWidth="1" />
+      </svg>
+
+      <div>
+        <div className="logo3-name">BREAKGLASS</div>
+        <div className="logo3-sub">Treasury Incident Response</div>
+      </div>
+      <p className="logo-label label-light">03 — Vault Light</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   LOGO 4 — Minimal Sentinel
+   Light/white, pure geometric mark: a hexagon
+   (on-chain node) with a single break-line, 
+   refined weight-contrast wordmark
+═══════════════════════════════════════════════════ */
+function Logo4() {
+  // Hexagon points
+  const hex = (cx, cy, r) => {
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 180) * (60 * i - 30);
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+    return pts.map(p => p.join(',')).join(' ');
+  };
+
+  return (
+    <div className="logo4-wrap">
+      <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+        {/* Outer hex ring */}
+        <polygon points={hex(36, 36, 34)} fill="none" stroke="#111" strokeWidth="2" />
+        {/* Inner hex */}
+        <polygon points={hex(36, 36, 20)} fill="none" stroke="#111" strokeWidth="1" opacity="0.3" />
+        {/* Connecting spokes — partial */}
+        <line x1="36" y1="2" x2="36" y2="16" stroke="#111" strokeWidth="1.5" />
+        <line x1="2" y1="36" x2="16" y2="36" stroke="#111" strokeWidth="1.5" />
+        <line x1="70" y1="36" x2="56" y2="36" stroke="#111" strokeWidth="1.5" />
+        {/* The break — a diagonal crack */}
+        <path d="M36 18L30 32L40 36L28 54"
+          stroke="#111" strokeWidth="2.5" strokeLinecap="round" />
+        {/* Red accent dot at origin */}
+        <circle cx="36" cy="18" r="3" fill="#dc2626" />
+        {/* Endpoint dot */}
+        <circle cx="28" cy="54" r="2" fill="#111" opacity="0.4" />
+      </svg>
+
+      <div style={{ textAlign: 'center' }}>
+        <div className="logo4-name">
+          <strong>BREAK</strong>GLASS
+        </div>
+        <div className="logo4-sub">Treasury Incident Response</div>
+      </div>
+      <p className="logo-label label-dark">04 — Minimal Sentinel</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   LOGO 5 — Editorial / Typographic
+   Near-black, pure typography play — stacked
+   serif display with gold accent bar. No icon mark.
+   DM Serif + Crimson Pro
+═══════════════════════════════════════════════════ */
+function Logo5() {
+  return (
+    <div className="logo5-wrap">
+      <div className="logo5-top">Treasury Incident Response</div>
+      <div className="logo5-name">
+        <span className="break-line">Break</span>
+        <span className="glass-line">Glass</span>
+      </div>
+      <div className="logo5-divider" />
+      <div className="logo5-sub">Safe Multisig · 22 Chains · 24/7</div>
+      <p className="logo-label label-light">05 — Editorial Serif</p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   CANVAS
+═══════════════════════════════════════════════════ */
+function App() {
+  return (
+    <DesignCanvas title="BreakGlass — Logo Explorations">
+      <DCSection id="logomarks" title="Logo Explorations">
+        <DCArtboard id="l1" label="01 Shield Fracture" width={400} height={380}>
+          <Logo1 />
+        </DCArtboard>
+        <DCArtboard id="l2" label="02 Emergency Reticle" width={400} height={380}>
+          <Logo2 />
+        </DCArtboard>
+        <DCArtboard id="l3" label="03 Vault Light" width={400} height={380}>
+          <Logo3 />
+        </DCArtboard>
+        <DCArtboard id="l4" label="04 Minimal Sentinel" width={400} height={380}>
+          <Logo4 />
+        </DCArtboard>
+        <DCArtboard id="l5" label="05 Editorial Serif" width={400} height={380}>
+          <Logo5 />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="lockup" title="Horizontal Lockup Variants (Top 3)">
+        <DCArtboard id="h1" label="Shield Fracture — Horizontal" width={560} height={160}>
+          <div style={{
+            background: '#060b14',
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: '24px',
+            padding: '24px'
+          }}>
+            <svg width="52" height="52" viewBox="0 0 96 96" fill="none">
+              <defs>
+                <linearGradient id="sg2" x1="48" y1="0" x2="48" y2="96" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#1d4ed8" />
+                  <stop offset="100%" stopColor="#1e3a8a" />
+                </linearGradient>
+                <filter id="cg2">
+                  <feGaussianBlur stdDeviation="2.5" result="blur" />
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <path d="M48 6L12 20V50C12 68 28 82 48 90C68 82 84 68 84 50V20L48 6Z"
+                fill="url(#sg2)" stroke="#3b82f6" strokeWidth="1.5" />
+              <g filter="url(#cg2)">
+                <path d="M48 30L42 44L50 46L40 66" stroke="#93c5fd" strokeWidth="2" strokeLinecap="round" />
+                <path d="M42 44L36 50" stroke="#60a5fa" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+                <path d="M50 46L56 52" stroke="#60a5fa" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+              </g>
+              <circle cx="48" cy="30" r="2.5" fill="#93c5fd" />
+            </svg>
+            <div>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: '26px', letterSpacing: '-0.02em', color: '#e8f4ff' }}>
+                BREAK<span style={{ color: '#3b82f6' }}>GLASS</span>
+              </div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9px', letterSpacing: '0.25em', color: '#3b82f6', textTransform: 'uppercase', marginTop: '3px' }}>
+                Treasury Incident Response
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="h2" label="Emergency Reticle — Horizontal" width={560} height={160}>
+          <div style={{
+            background: '#0d0d0d',
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: '28px',
+            padding: '24px'
+          }}>
+            <svg width="52" height="52" viewBox="0 0 80 80" fill="none">
+              <defs>
+                <filter id="rg2">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <circle cx="40" cy="40" r="36" stroke="#ef4444" strokeWidth="1.5" opacity="0.3" />
+              <circle cx="40" cy="40" r="28" stroke="#ef4444" strokeWidth="1" opacity="0.5" />
+              <line x1="4" y1="40" x2="22" y2="40" stroke="#ef4444" strokeWidth="1.5" />
+              <line x1="58" y1="40" x2="76" y2="40" stroke="#ef4444" strokeWidth="1.5" />
+              <line x1="40" y1="4" x2="40" y2="22" stroke="#ef4444" strokeWidth="1.5" />
+              <line x1="40" y1="58" x2="40" y2="76" stroke="#ef4444" strokeWidth="1.5" />
+              <circle cx="40" cy="40" r="14" stroke="#ef4444" strokeWidth="2" filter="url(#rg2)" />
+              <g filter="url(#rg2)">
+                <path d="M40 30L36 37L42 40L34 52" stroke="#ff6b6b" strokeWidth="1.5" strokeLinecap="round" />
+              </g>
+              <circle cx="40" cy="40" r="3" fill="#ef4444" filter="url(#rg2)" />
+            </svg>
+            <div>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: '28px', letterSpacing: '0.06em', color: '#fff', textTransform: 'uppercase', borderBottom: '2px solid #ef4444', paddingBottom: '2px' }}>
+                BREAKGLASS
+              </div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9px', letterSpacing: '0.28em', color: '#ef4444', textTransform: 'uppercase', marginTop: '5px' }}>
+                24/7 Incident Response
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="h3" label="Editorial Serif — Horizontal" width={560} height={160}>
+          <div style={{
+            background: '#0a0a0a',
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: '0',
+            padding: '24px'
+          }}>
+            <div style={{ borderRight: '1px solid #d4a843', paddingRight: '28px', marginRight: '28px', textAlign: 'right' }}>
+              <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: '38px', lineHeight: 0.9, color: '#fff', letterSpacing: '-0.01em' }}>
+                <span style={{ color: '#d4a843', display: 'block' }}>Break</span>
+                <span style={{ display: 'block' }}>Glass</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: "'Crimson Pro', serif", fontStyle: 'italic', fontSize: '12px', letterSpacing: '0.2em', color: '#888', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Treasury
+              </div>
+              <div style={{ fontFamily: "'Crimson Pro', serif", fontStyle: 'italic', fontSize: '12px', letterSpacing: '0.2em', color: '#888', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Incident
+              </div>
+              <div style={{ fontFamily: "'Crimson Pro', serif", fontStyle: 'italic', fontSize: '12px', letterSpacing: '0.2em', color: '#d4a843', textTransform: 'uppercase' }}>
+                Response
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<div id="root"></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="80" fill="#060b14"/>
+    <path d="M60 10L30 22V44C30 57 43 67 60 73C77 67 90 57 90 44V22L60 10Z" fill="#1d4ed8" stroke="#3b82f6" stroke-width="1"/>
+    <path d="M60 26L54 38L62 40L52 60" stroke="#93c5fd" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="60" cy="26" r="2" fill="#93c5fd"/>
+    <text x="60" y="78" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#3b82f6" letter-spacing="1">BREAKGLASS</text>
+  </svg>
+</template>
+</body>
+</html>

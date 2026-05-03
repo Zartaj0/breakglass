@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BreakGlass — Logo System</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script type="text/babel" src="design-canvas.jsx"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; font-family: 'Syne', sans-serif; }
+</style>
+</head>
+<body>
+<script type="text/babel">
+
+/* ─────────────────────────────────────────────
+   TOKENS
+───────────────────────────────────────────── */
+const T = {
+  red:    '#ef4444',
+  redGlow:'#ff6b6b',
+  white:  '#ffffff',
+  black:  '#0d0d0d',
+  off:    '#f4f3f1',
+  dark:   '#141414',
+  mid:    '#888',
+  mono:   "'IBM Plex Mono', monospace",
+  syne:   "'Syne', sans-serif",
+};
+
+/* ─────────────────────────────────────────────
+   RETICLE MARK — parameterized SVG component
+   size: px, color: accent, bg: fill, showCrack
+───────────────────────────────────────────── */
+function ReticleMark({ size = 80, color = T.red, bg = 'transparent', id = 'r', animated = false }) {
+  const cx = 40, cy = 40;
+  const filterId = `glow-${id}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 80 80" fill="none" style={{ flexShrink: 0 }}>
+      <defs>
+        <filter id={filterId} x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      {/* Background fill (if not transparent) */}
+      {bg !== 'transparent' && <circle cx={cx} cy={cy} r="38" fill={bg} />}
+
+      {/* Outer ring — faint */}
+      <circle cx={cx} cy={cy} r="36" stroke={color} strokeWidth="1.2" opacity="0.25" />
+
+      {/* Middle ring */}
+      <circle cx={cx} cy={cy} r="27" stroke={color} strokeWidth="1" opacity="0.5" />
+
+      {/* Cross hairs — gapped at rings */}
+      <line x1="4"  y1="40" x2="13" y2="40" stroke={color} strokeWidth="1.5" />
+      <line x1="67" y1="40" x2="76" y2="40" stroke={color} strokeWidth="1.5" />
+      <line x1="40" y1="4"  x2="40" y2="13" stroke={color} strokeWidth="1.5" />
+      <line x1="40" y1="67" x2="40" y2="76" stroke={color} strokeWidth="1.5" />
+
+      {/* Inner ring — focal */}
+      <circle cx={cx} cy={cy} r="14" stroke={color} strokeWidth="2"
+        filter={`url(#${filterId})`}
+        style={animated ? { transformOrigin: '40px 40px', animation: 'pulse-ring 2.4s ease-in-out infinite' } : {}}
+      />
+
+      {/* Corner bracket marks */}
+      <path d="M7 17 L7 7 L17 7"   stroke={color} strokeWidth="1.4" fill="none" opacity="0.55" />
+      <path d="M73 17 L73 7 L63 7" stroke={color} strokeWidth="1.4" fill="none" opacity="0.55" />
+      <path d="M7 63 L7 73 L17 73" stroke={color} strokeWidth="1.4" fill="none" opacity="0.55" />
+      <path d="M73 63 L73 73 L63 73" stroke={color} strokeWidth="1.4" fill="none" opacity="0.55" />
+
+      {/* Crack — the key differentiator */}
+      <g filter={`url(#${filterId})`}>
+        <path d="M40 28L35.5 37L42.5 40.5L33 54"
+          stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.95" />
+        <path d="M35.5 37L28 34.5"
+          stroke={color} strokeWidth="0.9" strokeLinecap="round" opacity="0.45" />
+        <path d="M42.5 40.5L49 43"
+          stroke={color} strokeWidth="0.9" strokeLinecap="round" opacity="0.45" />
+        <path d="M38 32L32 29"
+          stroke={color} strokeWidth="0.7" strokeLinecap="round" opacity="0.28" />
+      </g>
+
+      {/* Center dot */}
+      <circle cx={cx} cy={cy} r="2.8" fill={color} filter={`url(#${filterId})`} />
+
+      {/* Crack origin dot */}
+      <circle cx={cx} cy="28" r="1.5" fill={color} opacity="0.6" />
+    </svg>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   WORDMARK
+───────────────────────────────────────────── */
+function Wordmark({ size = 28, color = T.white, subColor = T.red, sub = 'Treasury Incident Response', weight = 800, tracking = '0.06em' }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{
+        fontFamily: T.syne,
+        fontWeight: weight,
+        fontSize: size,
+        letterSpacing: tracking,
+        color,
+        textTransform: 'uppercase',
+        lineHeight: 1,
+        position: 'relative',
+        display: 'inline-block',
+        paddingBottom: '4px',
+        borderBottom: `2px solid ${subColor}`,
+      }}>
+        BREAKGLASS
+      </div>
+      {sub && (
+        <div style={{
+          fontFamily: T.mono,
+          fontSize: Math.max(8, size * 0.31),
+          letterSpacing: '0.28em',
+          color: subColor,
+          textTransform: 'uppercase',
+          opacity: 0.9,
+        }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   FULL LOCKUP — horizontal
+───────────────────────────────────────────── */
+function LockupH({ bg, markColor, textColor, subColor, markSize = 56, wordSize = 26, sub, markBg = 'transparent', gap = 22, pad = 40, id }) {
+  return (
+    <div style={{
+      background: bg,
+      width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap, padding: pad,
+    }}>
+      <ReticleMark size={markSize} color={markColor} bg={markBg} id={id} />
+      <Wordmark size={wordSize} color={textColor} subColor={subColor} sub={sub} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   FULL LOCKUP — vertical / stacked
+───────────────────────────────────────────── */
+function LockupV({ bg, markColor, textColor, subColor, markSize = 72, wordSize = 30, sub, id, pad = 36 }) {
+  return (
+    <div style={{
+      background: bg,
+      width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 24, padding: pad,
+    }}>
+      <ReticleMark size={markSize} color={markColor} id={id} />
+      <Wordmark size={wordSize} color={textColor} subColor={subColor} sub={sub} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   ICON ONLY — standalone mark
+───────────────────────────────────────────── */
+function IconOnly({ bg, color, size, id, rounded = false, pad = 20 }) {
+  return (
+    <div style={{
+      background: bg,
+      width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: rounded ? 20 : 0,
+      padding: pad,
+    }}>
+      <ReticleMark size={size} color={color} id={id} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   ANIMATED MARK — for display
+───────────────────────────────────────────── */
+function AnimatedHero() {
+  return (
+    <div style={{
+      background: T.black,
+      width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 32, padding: 48,
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <style>{`
+        @keyframes pulse-ring {
+          0%, 100% { opacity: 1; r: 14; }
+          50%       { opacity: 0.5; r: 16; }
+        }
+        @keyframes sweep {
+          0%   { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes blink-dot {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.2; }
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .animated-wordmark { animation: fade-in-up 0.8s ease 0.3s both; }
+        .blink { animation: blink-dot 1.6s ease-in-out infinite; }
+        .sweep-line { transform-origin: 40px 40px; animation: sweep 4s linear infinite; }
+      `}</style>
+
+      <div style={{ position: 'relative' }}>
+        <svg width="140" height="140" viewBox="0 0 80 80" fill="none">
+          <defs>
+            <filter id="hero-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <radialGradient id="sweep-fade" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor={T.red} stopOpacity="0.18" />
+              <stop offset="100%" stopColor={T.red} stopOpacity="0" />
+            </radialGradient>
+          </defs>
+
+          {/* Sweep sector fill */}
+          <circle cx="40" cy="40" r="36" fill="url(#sweep-fade)" />
+
+          {/* Rotating sweep line */}
+          <line x1="40" y1="40" x2="40" y2="4"
+            stroke={T.red} strokeWidth="1" opacity="0.5"
+            className="sweep-line"
+          />
+
+          {/* Outer ring */}
+          <circle cx="40" cy="40" r="36" stroke={T.red} strokeWidth="1.2" opacity="0.25" />
+          {/* Middle ring */}
+          <circle cx="40" cy="40" r="27" stroke={T.red} strokeWidth="1" opacity="0.5" />
+
+          {/* Cross hairs */}
+          <line x1="4"  y1="40" x2="13" y2="40" stroke={T.red} strokeWidth="1.5" />
+          <line x1="67" y1="40" x2="76" y2="40" stroke={T.red} strokeWidth="1.5" />
+          <line x1="40" y1="4"  x2="40" y2="13" stroke={T.red} strokeWidth="1.5" />
+          <line x1="40" y1="67" x2="40" y2="76" stroke={T.red} strokeWidth="1.5" />
+
+          {/* Inner ring — pulsing */}
+          <circle cx="40" cy="40" r="14" stroke={T.red} strokeWidth="2"
+            filter="url(#hero-glow)"
+            style={{ transformOrigin: '40px 40px', animation: 'pulse-ring 2.4s ease-in-out infinite' }}
+          />
+
+          {/* Brackets */}
+          <path d="M7 17 L7 7 L17 7"   stroke={T.red} strokeWidth="1.4" fill="none" opacity="0.55" />
+          <path d="M73 17 L73 7 L63 7" stroke={T.red} strokeWidth="1.4" fill="none" opacity="0.55" />
+          <path d="M7 63 L7 73 L17 73" stroke={T.red} strokeWidth="1.4" fill="none" opacity="0.55" />
+          <path d="M73 63 L73 73 L63 73" stroke={T.red} strokeWidth="1.4" fill="none" opacity="0.55" />
+
+          {/* Crack */}
+          <g filter="url(#hero-glow)">
+            <path d="M40 28L35.5 37L42.5 40.5L33 54"
+              stroke={T.redGlow} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.95" />
+            <path d="M35.5 37L28 34.5" stroke={T.redGlow} strokeWidth="0.9" strokeLinecap="round" opacity="0.45" />
+            <path d="M42.5 40.5L49 43" stroke={T.redGlow} strokeWidth="0.9" strokeLinecap="round" opacity="0.45" />
+          </g>
+
+          {/* Center — blinking */}
+          <circle cx="40" cy="40" r="2.8" fill={T.red} filter="url(#hero-glow)" className="blink" />
+          <circle cx="40" cy="28" r="1.5" fill={T.red} opacity="0.6" />
+        </svg>
+      </div>
+
+      <div className="animated-wordmark" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{
+          fontFamily: T.syne, fontWeight: 800, fontSize: 36,
+          letterSpacing: '0.08em', color: T.white, textTransform: 'uppercase',
+          borderBottom: `2px solid ${T.red}`, paddingBottom: 5,
+        }}>BREAKGLASS</div>
+        <div style={{
+          fontFamily: T.mono, fontSize: 10, letterSpacing: '0.3em',
+          color: T.red, textTransform: 'uppercase',
+        }}>Treasury Incident Response</div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   SIZE SPECIMENS
+───────────────────────────────────────────── */
+function SizeSpec() {
+  const sizes = [
+    { label: '16px — Favicon/App icon', size: 16 },
+    { label: '24px — Navigation',        size: 24 },
+    { label: '40px — Card / small UI',   size: 40 },
+    { label: '64px — Header / medium',   size: 64 },
+    { label: '96px — Hero / large',      size: 96 },
+  ];
+  return (
+    <div style={{
+      background: T.black, width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column',
+      justifyContent: 'center', gap: 24, padding: '40px 56px',
+    }}>
+      {sizes.map(({ label, size }, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <ReticleMark size={size} color={T.red} id={`sz-${i}`} />
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: '#555', letterSpacing: '0.12em' }}>
+            {label}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   COLOR SPEC
+───────────────────────────────────────────── */
+function ColorSpec() {
+  const swatches = [
+    { label: 'Alert Red',    hex: '#ef4444', text: '#fff' },
+    { label: 'Red Glow',     hex: '#ff6b6b', text: '#fff' },
+    { label: 'Void Black',   hex: '#0d0d0d', text: '#fff' },
+    { label: 'Near-Black',   hex: '#141414', text: '#fff' },
+    { label: 'White',        hex: '#ffffff', text: '#0d0d0d' },
+    { label: 'Off-White',    hex: '#f4f3f1', text: '#0d0d0d' },
+  ];
+  return (
+    <div style={{
+      background: T.black, width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column',
+      justifyContent: 'center', padding: '32px 40px', gap: 8,
+    }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {swatches.map(({ label, hex, text }) => (
+          <div key={hex} style={{
+            background: hex, borderRadius: 6,
+            padding: '14px 18px', flex: '1 0 120px',
+            minHeight: 80, display: 'flex', flexDirection: 'column',
+            justifyContent: 'flex-end', gap: 2,
+          }}>
+            <div style={{ fontFamily: T.syne, fontWeight: 700, fontSize: 11, color: text, letterSpacing: '0.04em' }}>
+              {label}
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 10, color: text, opacity: 0.65, letterSpacing: '0.08em' }}>
+              {hex}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   TYPE SPEC
+───────────────────────────────────────────── */
+function TypeSpec() {
+  return (
+    <div style={{
+      background: T.black, width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column',
+      justifyContent: 'center', padding: '40px 56px', gap: 28,
+    }}>
+      <div>
+        <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: '0.22em', color: '#444', textTransform: 'uppercase', marginBottom: 8 }}>
+          Display / Wordmark
+        </div>
+        <div style={{ fontFamily: T.syne, fontWeight: 800, fontSize: 42, color: T.white, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1 }}>
+          BREAKGLASS
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: '#333', marginTop: 4, letterSpacing: '0.1em' }}>
+          Syne 800 — 0.06em tracking
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: '0.22em', color: '#444', textTransform: 'uppercase', marginBottom: 8 }}>
+          Subhead / Label
+        </div>
+        <div style={{ fontFamily: T.syne, fontWeight: 600, fontSize: 18, color: '#ccc', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          Treasury Incident Response
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: '#333', marginTop: 4, letterSpacing: '0.1em' }}>
+          Syne 600 — 0.1em tracking
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: '0.22em', color: '#444', textTransform: 'uppercase', marginBottom: 8 }}>
+          Caption / Mono
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 13, color: T.red, letterSpacing: '0.28em', textTransform: 'uppercase' }}>
+          24/7 · 22 Chains · 30s Monitoring
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: '#333', marginTop: 4, letterSpacing: '0.1em' }}>
+          IBM Plex Mono 400 — 0.28em tracking
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   DO / DON'T
+───────────────────────────────────────────── */
+function DoDont() {
+  return (
+    <div style={{
+      background: T.black, width: '100%', height: '100%',
+      display: 'flex', gap: 0,
+    }}>
+      {/* DO */}
+      <div style={{
+        flex: 1, padding: '32px', borderRight: '1px solid #1e1e1e',
+        display: 'flex', flexDirection: 'column', gap: 20,
+      }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: '0.22em', color: '#22c55e', textTransform: 'uppercase' }}>
+          ✓ Do
+        </div>
+        {[
+          { bg: T.black, c: T.red, label: 'Dark bg, red mark' },
+          { bg: '#f4f3f1', c: '#0d0d0d', label: 'Light bg, black mark' },
+          { bg: T.red, c: T.white, label: 'Red bg, white mark' },
+        ].map(({ bg, c, label }, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ background: bg, padding: 10, borderRadius: 6, border: '1px solid #222' }}>
+              <ReticleMark size={36} color={c} id={`do-${i}`} />
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 10, color: '#555', letterSpacing: '0.1em' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* DON'T */}
+      <div style={{
+        flex: 1, padding: '32px',
+        display: 'flex', flexDirection: 'column', gap: 20,
+      }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: '0.22em', color: '#ef4444', textTransform: 'uppercase' }}>
+          ✗ Don't
+        </div>
+        {[
+          { bg: '#1d4ed8', c: T.red, label: "Don't use on colored bgs" },
+          { bg: T.black, c: '#888', label: "Don't grey out the mark" },
+          { bg: T.black, c: T.red, label: "Don't stretch or skew", transform: 'scaleX(1.4)' },
+        ].map(({ bg, c, label, transform }, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ background: bg, padding: 10, borderRadius: 6, border: '1px solid #222', opacity: 0.7 }}>
+              <div style={{ transform, display: 'inline-block' }}>
+                <ReticleMark size={36} color={c} id={`dont-${i}`} />
+              </div>
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 10, color: '#555', letterSpacing: '0.1em' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   APP
+───────────────────────────────────────────── */
+function App() {
+  return (
+    <DesignCanvas title="BreakGlass — Logo System">
+
+      {/* SECTION 1 — Primary lockups */}
+      <DCSection id="primary" title="Primary Lockups">
+
+        <DCArtboard id="hero-animated" label="Hero — Animated Mark" width={480} height={400}>
+          <AnimatedHero />
+        </DCArtboard>
+
+        <DCArtboard id="h-dark" label="Horizontal — Dark" width={540} height={160}>
+          <LockupH bg={T.black} markColor={T.red} textColor={T.white} subColor={T.red}
+            sub="Treasury Incident Response" id="hd" />
+        </DCArtboard>
+
+        <DCArtboard id="h-light" label="Horizontal — Light" width={540} height={160}>
+          <LockupH bg={T.off} markColor="#0d0d0d" textColor="#0d0d0d" subColor="#dc2626"
+            sub="Treasury Incident Response" id="hl" />
+        </DCArtboard>
+
+        <DCArtboard id="v-dark" label="Stacked — Dark" width={340} height={360}>
+          <LockupV bg={T.black} markColor={T.red} textColor={T.white} subColor={T.red}
+            sub="Treasury Incident Response" id="vd" />
+        </DCArtboard>
+
+        <DCArtboard id="v-light" label="Stacked — Light" width={340} height={360}>
+          <LockupV bg={T.off} markColor="#0d0d0d" textColor="#0d0d0d" subColor="#dc2626"
+            sub="Treasury Incident Response" id="vl" />
+        </DCArtboard>
+
+        <DCArtboard id="v-red" label="Stacked — Red" width={340} height={360}>
+          <LockupV bg={T.red} markColor={T.white} textColor={T.white} subColor="rgba(255,255,255,0.7)"
+            sub="Treasury Incident Response" id="vr" />
+        </DCArtboard>
+
+      </DCSection>
+
+      {/* SECTION 2 — Icon marks */}
+      <DCSection id="icons" title="Icon / App Marks">
+
+        <DCArtboard id="icon-dark-sq" label="App Icon — Dark" width={180} height={180}>
+          <IconOnly bg={T.black} color={T.red} size={110} id="icsq" rounded={false} />
+        </DCArtboard>
+
+        <DCArtboard id="icon-light-sq" label="App Icon — Light" width={180} height={180}>
+          <IconOnly bg={T.off} color="#0d0d0d" size={110} id="ilsq" />
+        </DCArtboard>
+
+        <DCArtboard id="icon-red-sq" label="App Icon — Red" width={180} height={180}>
+          <IconOnly bg={T.red} color={T.white} size={110} id="irsq" />
+        </DCArtboard>
+
+        <DCArtboard id="icon-rounded" label="App Icon — Rounded (iOS)" width={180} height={180}>
+          <div style={{
+            width: '100%', height: '100%',
+            background: '#1a1a1a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              width: 140, height: 140, borderRadius: 32,
+              background: T.black, display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 24px rgba(239,68,68,0.25)',
+            }}>
+              <ReticleMark size={96} color={T.red} id="ios" />
+            </div>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="icon-favicon" label="Favicon (16×16)" width={180} height={180}>
+          <div style={{
+            background: '#1a1a1a', width: '100%', height: '100%',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 20,
+          }}>
+            {/* Shown at actual size + 4x zoom */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <ReticleMark size={16} color={T.red} id="fav16" />
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: '#444', letterSpacing: '0.1em' }}>16px</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <ReticleMark size={32} color={T.red} id="fav32" />
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: '#444', letterSpacing: '0.1em' }}>32px</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <ReticleMark size={64} color={T.red} id="fav64" />
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: '#444', letterSpacing: '0.1em' }}>64px</div>
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+
+      </DCSection>
+
+      {/* SECTION 3 — Spec */}
+      <DCSection id="spec" title="Design Specification">
+
+        <DCArtboard id="sizes" label="Size Scale" width={480} height={360}>
+          <SizeSpec />
+        </DCArtboard>
+
+        <DCArtboard id="colors" label="Color Palette" width={560} height={200}>
+          <ColorSpec />
+        </DCArtboard>
+
+        <DCArtboard id="type" label="Typography" width={520} height={340}>
+          <TypeSpec />
+        </DCArtboard>
+
+        <DCArtboard id="dodont" label="Do / Don't" width={560} height={320}>
+          <DoDont />
+        </DCArtboard>
+
+      </DCSection>
+
+      {/* SECTION 4 — In context */}
+      <DCSection id="context" title="In Context">
+
+        <DCArtboard id="ctx-nav" label="Dashboard Navigation" width={860} height={72}>
+          <div style={{
+            background: '#0d0d0d', width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 32px', borderBottom: '1px solid #1a1a1a',
+          }}>
+            {/* Logo lockup */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <ReticleMark size={32} color={T.red} id="nav-mark" />
+              <div style={{
+                fontFamily: T.syne, fontWeight: 800, fontSize: 16,
+                letterSpacing: '0.07em', color: T.white, textTransform: 'uppercase',
+                borderBottom: `1.5px solid ${T.red}`, paddingBottom: 1,
+              }}>BREAKGLASS</div>
+            </div>
+            {/* Nav items */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+              {['Monitor', 'Incidents', 'Runbooks', 'Settings'].map(item => (
+                <div key={item} style={{
+                  fontFamily: T.mono, fontSize: 11, letterSpacing: '0.14em',
+                  color: item === 'Monitor' ? T.red : '#555',
+                  textTransform: 'uppercase',
+                }}>{item}</div>
+              ))}
+            </div>
+            {/* Status pill */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 100, padding: '5px 12px',
+            }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.red, boxShadow: '0 0 6px #ef4444' }} />
+              <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: '0.18em', color: T.red, textTransform: 'uppercase' }}>
+                Monitoring
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="ctx-badge" label="Alert / Incident Badge" width={400} height={200}>
+          <div style={{
+            background: '#0d0d0d', width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32,
+          }}>
+            {/* HALT badge */}
+            <div style={{
+              background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 8, padding: '14px 20px',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <ReticleMark size={28} color={T.red} id="badge-halt" />
+              <div>
+                <div style={{ fontFamily: T.syne, fontWeight: 800, fontSize: 13, color: T.red, letterSpacing: '0.1em' }}>HALT</div>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: '#555', letterSpacing: '0.1em', marginTop: 2 }}>Suspicious tx</div>
+              </div>
+            </div>
+            {/* APPROVE badge */}
+            <div style={{
+              background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)',
+              borderRadius: 8, padding: '14px 20px',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <ReticleMark size={28} color="#22c55e" id="badge-ok" />
+              <div>
+                <div style={{ fontFamily: T.syne, fontWeight: 800, fontSize: 13, color: '#22c55e', letterSpacing: '0.1em' }}>APPROVE</div>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: '#555', letterSpacing: '0.1em', marginTop: 2 }}>Verified tx</div>
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard id="ctx-email" label="Email / Report Header" width={680} height={140}>
+          <div style={{
+            background: '#111', width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '28px 48px',
+            borderBottom: '1px solid #1e1e1e',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <ReticleMark size={40} color={T.red} id="email-mark" />
+              <div>
+                <div style={{ fontFamily: T.syne, fontWeight: 800, fontSize: 20, color: T.white, letterSpacing: '0.07em', textTransform: 'uppercase', borderBottom: `1.5px solid ${T.red}`, paddingBottom: 2 }}>
+                  BREAKGLASS
+                </div>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: '0.24em', textTransform: 'uppercase', marginTop: 4 }}>
+                  Incident Report
+                </div>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: '#444', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                Generated
+              </div>
+              <div style={{ fontFamily: T.mono, fontSize: 11, color: '#666', letterSpacing: '0.08em', marginTop: 3 }}>
+                2026-05-03 · 04:17 UTC
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+
+      </DCSection>
+
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<div id="root"></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="80" fill="#0d0d0d"/>
+    <circle cx="60" cy="36" r="28" stroke="#ef4444" stroke-width="1" opacity="0.3" fill="none"/>
+    <circle cx="60" cy="36" r="20" stroke="#ef4444" stroke-width="1" opacity="0.5" fill="none"/>
+    <circle cx="60" cy="36" r="10" stroke="#ef4444" stroke-width="1.5" fill="none"/>
+    <line x1="32" y1="36" x2="42" y2="36" stroke="#ef4444" stroke-width="1.2"/>
+    <line x1="78" y1="36" x2="88" y2="36" stroke="#ef4444" stroke-width="1.2"/>
+    <line x1="60" y1="8" x2="60" y2="18" stroke="#ef4444" stroke-width="1.2"/>
+    <line x1="60" y1="54" x2="60" y2="64" stroke="#ef4444" stroke-width="1.2"/>
+    <path d="M60 28L57 33L62 35L55 46" stroke="#ff6b6b" stroke-width="1.2" stroke-linecap="round"/>
+    <circle cx="60" cy="36" r="2" fill="#ef4444"/>
+    <text x="60" y="76" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#ef4444" letter-spacing="2">BREAKGLASS</text>
+  </svg>
+</template>
+</body>
+</html>
